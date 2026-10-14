@@ -391,7 +391,9 @@ with tab_imp:
 with tab_imp:
     st.markdown("#### 🖨️ Impresión Térmica Bluetooth (3 Secciones con Cortes)")
     t_prev = st.session_state.get("ticket_activo", "Genera un ingreso de vehículo para visualizar el ticket.")
-    st.text_area("Formato ESC/POS:", value=t_prev, height=350, key="txt_escpos")
+    
+    # Única declaración del componente con una clave limpia
+    st.text_area("Formato ESC/POS:", value=t_prev, height=350, key="txt_escpos_unico")
 
     js_bluetooth = """
     <script>
@@ -439,8 +441,7 @@ with tab_imp:
     </button>
     """
     st.components.v1.html(js_bluetooth, height=80)
-
-    st.components.v1.html(js_bluetooth, height=80)
+    
 
 # =========================================================================
 # MÓDULO DE AUDITORÍA, EVENTOS EXTRAORDINARIOS Y WHATSAPP
