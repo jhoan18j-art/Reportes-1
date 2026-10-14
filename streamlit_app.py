@@ -765,7 +765,7 @@ with st.sidebar:
         st.session_state.rol = None
         st.rerun()
 
-tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_aud = st.tabs([
+tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud = st.tabs([
     "📥 Ingreso y 4 Fotografías",
     "📋 Vehículos Registrados",
     "🚘 Salida y Cobro",
@@ -773,6 +773,7 @@ tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_aud
     "🖨️ Re-Impresión Térmica",
     "📊 Reportes y Excel",
     "💵 Cortes de Caja",
+    "📒 Cierre diario por sucursal",
     "🕵️ Auditoría y WhatsApp",
 ])
 
@@ -1461,6 +1462,312 @@ with tab_corte:
 
 
 # ---------------------------------------------------------------------
+# CIERRE DIARIO POR SUCURSAL
+# ---------------------------------------------------------------------
+with tab_cierre_diario:
+    st.subheader("Reporte diario de cierre por sucursal")
+    st.caption(
+        "Captura y entrega el balance diario de boletos, cobros y gastos. "
+        "Cada sucursal puede guardar un cierre por fecha; el contador puede consultar todas."
+    )
+
+    CIERRES_DIARIOS_FILE = DATA_DIR / "cierres_diarios_sucursal.json"
+    GASTOS_CIERRE_FILE = DATA_DIR / "gastos_operativos.json"
+
+    def cargar_cierres_diarios():
+        if not CIERRES_DIARIOS_FILE.exists():
+            return []
+        try:
+            contenido = json.loads(CIERRES_DIARIOS_FILE.read_text(encoding="utf-8"))
+            return contenido if isinstance(contenido, list) else []
+        except (OSError, json.JSONDecodeError):
+            return []
+
+    def guardar_cierres_diarios(contenido):
+        temporal = CIERRES_DIARIOS_FILE.with_suffix(".tmp")
+        temporal.write_text(json.dumps(contenido, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temporal, CIERRES_DIARIOS_FILE)
+
+    def fecha_a_date(valor):
+        for formato in ("%d/%m/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(str(valor or ""), formato).date()
+            except (ValueError, TypeError):
+                continue
+        return None
+
+    def numero_folio(valor):
+        try:
+            return int(str(valor or "").strip().rsplit("-", 1)[-1])
+        except (ValueError, TypeError):
+            return None
+
+    sucursales_cierre = SUCURSALES if es_global else [st.session_state.sucursal_asignada]
+    fecha_cierre = st.date_input("Fecha operativa del cierre", value=datetime.now().date(), key="fecha_reporte_cierre_diario")
+    sucursal_cierre = st.selectbox("Sucursal del reporte", sucursales_cierre, key="sucursal_reporte_cierre_diario")
+
+    registros_cierre = [
+        r for r in st.session_state.vehiculos
+        if r.get("sucursal") == sucursal_cierre and fecha_a_date(r.get("fecha")) == fecha_cierre
+    ]
+    gastos_cierre = []
+    if GASTOS_CIERRE_FILE.exists():
+        try:
+            datos_gastos = json.loads(GASTOS_CIERRE_FILE.read_text(encoding="utf-8"))
+            if isinstance(datos_gastos, list):
+                gastos_cierre = [
+                    g for g in datos_gastos
+                    if g.get("sucursal") == sucursal_cierre and fecha_a_date(g.get("fecha")) == fecha_cierre
+                ]
+        except (OSError, json.JSONDecodeError):
+            gastos_cierre = []
+
+    total_gastos_registrados = sum(dinero(g.get("importe")) for g in gastos_cierre)
+    pagos_confirmados_cierre = []
+    folios_pagados = set()
+    ingresos_confirmados_cierre = 0.0
+    for reg in registros_cierre:
+        pagos_reg = [pago for pago in reg.get("pagos", []) if pago.get("estado") == "Pagado"]
+        if pagos_reg:
+            for pago in pagos_reg:
+                pagos_confirmados_cierre.append(pago)
+                ingresos_confirmados_cierre += dinero(pago.get("importe"))
+            folios_pagados.add(reg.get("id"))
+        elif reg.get("pago_estado") == "Pagado":
+            folios_pagados.add(reg.get("id"))
+            ingresos_confirmados_cierre += dinero(reg.get("importe_cobrado", reg.get("tarifa", 0)))
+
+    cancelados_auto = sum(1 for r in registros_cierre if str(r.get("estado", "")).lower() in ("cancelado", "cancelada"))
+    perdidos_auto = sum(1 for r in registros_cierre if str(r.get("estado", "")).lower() in ("perdido", "perdida", "extraviado", "extraviada"))
+    pares_folios = [(numero_folio(r.get("id")), str(r.get("id", ""))) for r in registros_cierre]
+    pares_folios = [(n, folio) for n, folio in pares_folios if n is not None]
+    folio_inicial_default = min(pares_folios, key=lambda x: x[0])[1] if pares_folios else ""
+    folio_final_default = max(pares_folios, key=lambda x: x[0])[1] if pares_folios else ""
+    clave_widget_cierre = f"{sucursal_cierre}_{fecha_cierre:%Y%m%d}".replace(" ", "_")
+
+    st.markdown("#### Datos del turno y control de boletos")
+    st.caption("Los conteos se precargan desde los registros del sistema. Puedes corregirlos si hubo boletos físicos no capturados digitalmente.")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        fecha_precio = st.number_input(
+            "Costo unitario del boleto ($)", min_value=0.0,
+            value=float(PRECIOS_SUCURSALES.get(sucursal_cierre, 0)), step=5.0,
+            key=f"cierre_precio_{clave_widget_cierre}"
+        )
+        folio_inicial = st.text_input(
+            "Folio inicial de la sesión", value=folio_inicial_default,
+            key=f"cierre_folio_ini_{clave_widget_cierre}"
+        )
+    with c2:
+        folio_final = st.text_input(
+            "Folio final de la sesión", value=folio_final_default,
+            key=f"cierre_folio_fin_{clave_widget_cierre}"
+        )
+        total_boletos_auto = len(registros_cierre)
+        ni = numero_folio(folio_inicial)
+        nf = numero_folio(folio_final)
+        if ni is not None and nf is not None and nf >= ni:
+            total_boletos_auto = nf - ni + 1
+        total_boletos = st.number_input(
+            "Total de boletos utilizados", min_value=0, value=int(total_boletos_auto), step=1,
+            key=f"cierre_total_{clave_widget_cierre}"
+        )
+    with c3:
+        boletos_pagados = st.number_input(
+            "Boletos pagados", min_value=0, value=int(len(folios_pagados)), step=1,
+            key=f"cierre_pagados_{clave_widget_cierre}"
+        )
+        boletos_cancelados = st.number_input(
+            "Boletos cancelados", min_value=0, value=int(cancelados_auto), step=1,
+            key=f"cierre_cancelados_{clave_widget_cierre}"
+        )
+        boletos_perdidos = st.number_input(
+            "Boletos perdidos", min_value=0, value=int(perdidos_auto), step=1,
+            key=f"cierre_perdidos_{clave_widget_cierre}"
+        )
+
+    st.markdown("#### Gastos generales y balance")
+    st.write(f"**Gastos operativos ya registrados en el sistema:** ${total_gastos_registrados:,.2f} MXN")
+    st.caption("Si agregas un gasto adicional aquí, quedará en este cierre diario y no se duplicará en el catálogo de gastos operativos.")
+    colg1, colg2 = st.columns(2)
+    with colg1:
+        gasto_adicional = st.number_input(
+            "Gastos generales adicionales de este cierre ($)", min_value=0.0, value=0.0, step=50.0,
+            key=f"cierre_gasto_extra_{clave_widget_cierre}"
+        )
+    with colg2:
+        detalle_gasto_adicional = st.text_input(
+            "Concepto / observaciones de gastos", key=f"cierre_gasto_concepto_{clave_widget_cierre}"
+        )
+
+    total_gastos_cierre = total_gastos_registrados + float(gasto_adicional)
+    balance_cierre = ingresos_confirmados_cierre - total_gastos_cierre
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Vehículos registrados ese día", len(registros_cierre))
+    m2.metric("Ingresos confirmados", f"${ingresos_confirmados_cierre:,.2f}")
+    m3.metric("Gastos totales", f"${total_gastos_cierre:,.2f}")
+    m4.metric("Balance del día", f"${balance_cierre:,.2f}")
+    st.caption("El balance se calcula con cobros confirmados menos gastos registrados y gastos adicionales del cierre; los boletos cancelados/perdidos no se cuentan como cobros salvo que exista un pago confirmado.")
+
+    cierres_guardados = cargar_cierres_diarios()
+    cierre_existente = next((c for c in cierres_guardados if c.get("fecha") == str(fecha_cierre) and c.get("sucursal") == sucursal_cierre), None)
+    if cierre_existente:
+        st.warning(f"Ya existe un cierre para {sucursal_cierre} el {fecha_cierre}. Marca la casilla para reemplazarlo con los datos actuales.")
+    reemplazar_cierre = st.checkbox(
+        "Confirmo que deseo reemplazar el cierre existente de esta sucursal y fecha",
+        value=False, key=f"cierre_reemplazar_{clave_widget_cierre}", disabled=not bool(cierre_existente)
+    )
+    if st.button("💾 Guardar cierre diario", type="primary", key=f"guardar_cierre_diario_{clave_widget_cierre}"):
+        if not folio_inicial.strip() or not folio_final.strip():
+            st.error("Captura el folio inicial y el folio final de la sesión.")
+        elif int(boletos_pagados) + int(boletos_cancelados) + int(boletos_perdidos) > int(total_boletos):
+            st.error("La suma de boletos pagados, cancelados y perdidos no puede superar el total de boletos utilizados.")
+        elif cierre_existente and not reemplazar_cierre:
+            st.error("El cierre ya existe. Marca la casilla de reemplazo si realmente necesitas corregirlo.")
+        else:
+            cierre = {
+                "id": cierre_existente.get("id") if cierre_existente else uuid.uuid4().hex[:12].upper(),
+                "fecha": str(fecha_cierre),
+                "sucursal": sucursal_cierre,
+                "costo_unitario_boleto": float(fecha_precio),
+                "folio_inicial": folio_inicial.strip(),
+                "folio_final": folio_final.strip(),
+                "total_boletos": int(total_boletos),
+                "boletos_pagados": int(boletos_pagados),
+                "boletos_cancelados": int(boletos_cancelados),
+                "boletos_perdidos": int(boletos_perdidos),
+                "ingresos_confirmados": round(ingresos_confirmados_cierre, 2),
+                "gastos_operativos_registrados": round(total_gastos_registrados, 2),
+                "gastos_generales_adicionales": round(float(gasto_adicional), 2),
+                "concepto_gastos_adicionales": detalle_gasto_adicional.strip(),
+                "gastos_totales": round(total_gastos_cierre, 2),
+                "balance_neto": round(balance_cierre, 2),
+                "usuario": st.session_state.usuario_autenticado,
+                "rol": st.session_state.rol,
+                "guardado_en": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            if cierre_existente:
+                cierres_guardados = [cierre if c.get("id") == cierre_existente.get("id") else c for c in cierres_guardados]
+            else:
+                cierres_guardados.insert(0, cierre)
+            try:
+                guardar_cierres_diarios(cierres_guardados)
+                guardar_evento_auditoria("CIERRE DIARIO POR SUCURSAL", f"{sucursal_cierre} · {fecha_cierre} · ingresos ${ingresos_confirmados_cierre:.2f} · gastos ${total_gastos_cierre:.2f} · balance ${balance_cierre:.2f}")
+                st.success("Cierre diario guardado. Ya puedes descargar la hoja de cálculo para entregar el balance.")
+                st.rerun()
+            except OSError as exc:
+                st.error(f"No se pudo guardar el cierre diario: {exc}")
+
+    st.divider()
+    st.markdown("#### Historial y entrega de hoja de cálculo")
+    cierres_guardados = cargar_cierres_diarios()
+    cierres_visibles = cierres_guardados if es_global else [c for c in cierres_guardados if c.get("sucursal") == st.session_state.sucursal_asignada]
+    if cierres_visibles:
+        df_cierres = pd.DataFrame(cierres_visibles)
+        columnas_mostrar_cierres = [
+            "fecha", "sucursal", "costo_unitario_boleto", "folio_inicial", "folio_final",
+            "total_boletos", "boletos_pagados", "boletos_cancelados", "boletos_perdidos",
+            "ingresos_confirmados", "gastos_totales", "balance_neto", "usuario", "guardado_en"
+        ]
+        st.dataframe(df_cierres.reindex(columns=columnas_mostrar_cierres), use_container_width=True, hide_index=True)
+        opciones_cierre = {
+            f"{c.get('fecha')} · {c.get('sucursal')} · Balance ${dinero(c.get('balance_neto')):,.2f}": c
+            for c in cierres_visibles
+        }
+        etiqueta_cierre = st.selectbox("Selecciona el cierre que vas a entregar", list(opciones_cierre.keys()), key="seleccionar_cierre_descarga")
+        cierre_descarga = opciones_cierre[etiqueta_cierre]
+        fecha_exportacion = fecha_a_date(cierre_descarga.get("fecha"))
+        registros_excel_cierre = [
+            r for r in st.session_state.vehiculos
+            if r.get("sucursal") == cierre_descarga.get("sucursal")
+            and fecha_a_date(r.get("fecha")) == fecha_exportacion
+        ]
+        gastos_excel_cierre = []
+        if GASTOS_CIERRE_FILE.exists():
+            try:
+                gastos_archivo_excel = json.loads(GASTOS_CIERRE_FILE.read_text(encoding="utf-8"))
+                if isinstance(gastos_archivo_excel, list):
+                    gastos_excel_cierre = [
+                        g for g in gastos_archivo_excel
+                        if g.get("sucursal") == cierre_descarga.get("sucursal")
+                        and fecha_a_date(g.get("fecha")) == fecha_exportacion
+                    ]
+            except (OSError, json.JSONDecodeError):
+                gastos_excel_cierre = []
+        salida_excel = io.BytesIO()
+        df_resumen_cierre = pd.DataFrame([{
+            "Fecha": cierre_descarga.get("fecha"),
+            "Sucursal": cierre_descarga.get("sucursal"),
+            "Costo unitario boleto ($)": cierre_descarga.get("costo_unitario_boleto"),
+            "Folio inicial": cierre_descarga.get("folio_inicial"),
+            "Folio final": cierre_descarga.get("folio_final"),
+            "Total boletos": cierre_descarga.get("total_boletos"),
+            "Boletos pagados": cierre_descarga.get("boletos_pagados"),
+            "Boletos cancelados": cierre_descarga.get("boletos_cancelados"),
+            "Boletos perdidos": cierre_descarga.get("boletos_perdidos"),
+            "Ingresos confirmados ($)": cierre_descarga.get("ingresos_confirmados"),
+            "Gastos operativos registrados ($)": cierre_descarga.get("gastos_operativos_registrados"),
+            "Gastos generales adicionales ($)": cierre_descarga.get("gastos_generales_adicionales"),
+            "Concepto gastos adicionales": cierre_descarga.get("concepto_gastos_adicionales"),
+            "Gastos totales ($)": cierre_descarga.get("gastos_totales"),
+            "Balance neto ($)": cierre_descarga.get("balance_neto"),
+            "Elaboró": cierre_descarga.get("usuario"),
+            "Rol": cierre_descarga.get("rol"),
+            "Fecha/hora de elaboración": cierre_descarga.get("guardado_en"),
+        }])
+        try:
+            with pd.ExcelWriter(salida_excel, engine="openpyxl") as writer:
+                df_resumen_cierre.to_excel(writer, sheet_name="Cierre diario", index=False, startrow=2)
+                ws = writer.sheets["Cierre diario"]
+                ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(df_resumen_cierre.columns))
+                ws.cell(row=1, column=1, value="CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V. — CIERRE DIARIO")
+                ws.cell(row=1, column=1).font = openpyxl.styles.Font(bold=True, size=14, color="FFFFFF")
+                ws.cell(row=1, column=1).fill = openpyxl.styles.PatternFill("solid", fgColor="1F4E78")
+                ws.freeze_panes = "A4"
+                ws.auto_filter.ref = f"A3:{openpyxl.utils.get_column_letter(len(df_resumen_cierre.columns))}4"
+                for col_cells in ws.columns:
+                    max_len = max(len(str(cell.value or "")) for cell in col_cells)
+                    ws.column_dimensions[openpyxl.utils.get_column_letter(col_cells[0].column)].width = min(max(max_len + 2, 14), 36)
+                ws.append([])
+                ws.append(["Detalle de gastos operativos registrados en la sucursal y fecha"])
+                ws.append(["Categoría", "Concepto", "Importe ($)", "Registrado por"])
+                for gasto in gastos_excel_cierre:
+                    ws.append([gasto.get("categoria", ""), gasto.get("concepto", ""), dinero(gasto.get("importe")), gasto.get("registrado_por", "")])
+                ws2 = writer.book.create_sheet("Boletos del día")
+                ws2.append(["Folio", "Fecha de entrada", "Sucursal", "Tarifa ($)", "Estado", "Pagado ($)"])
+                for reg in registros_excel_cierre:
+                    pagado_reg = sum(dinero(p.get("importe")) for p in reg.get("pagos", []) if p.get("estado") == "Pagado")
+                    if not reg.get("pagos") and reg.get("pago_estado") == "Pagado":
+                        pagado_reg = dinero(reg.get("importe_cobrado", reg.get("tarifa", 0)))
+                    ws2.append([reg.get("id", ""), reg.get("fecha", ""), reg.get("sucursal", ""), dinero(reg.get("tarifa")), reg.get("estado", ""), pagado_reg])
+                ws2.freeze_panes = "A2"
+                ws2.auto_filter.ref = f"A1:F{max(ws2.max_row, 1)}"
+                for col in ws2.columns:
+                    max_len = max(len(str(cell.value or "")) for cell in col)
+                    ws2.column_dimensions[openpyxl.utils.get_column_letter(col[0].column)].width = min(max(max_len + 2, 14), 34)
+            st.download_button(
+                "📥 Descargar cierre diario en Excel (.xlsx)",
+                data=salida_excel.getvalue(),
+                file_name=f"ClubPark_Cierre_{cierre_descarga.get('sucursal','Sucursal').replace(' ','_')}_{cierre_descarga.get('fecha','')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="descargar_excel_cierre_diario",
+            )
+            st.download_button(
+                "📄 Descargar cierre diario en CSV",
+                data=df_resumen_cierre.to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"ClubPark_Cierre_{cierre_descarga.get('fecha','')}.csv",
+                mime="text/csv",
+                key="descargar_csv_cierre_diario",
+            )
+        except Exception as exc:
+            st.error(f"No se pudo preparar el Excel del cierre diario: {exc}")
+            st.info("Confirma que openpyxl esté instalado en requirements.txt.")
+    else:
+        st.info("Todavía no hay cierres diarios guardados para esta sucursal.")
+
+
+# ---------------------------------------------------------------------
 # TAB 3: REIMPRESIÓN
 # ---------------------------------------------------------------------
 with tab_imp:
@@ -1682,3 +1989,4 @@ if es_contador:
         st.dataframe(pd.DataFrame(eventos), use_container_width=True, hide_index=True)
     else:
         st.info("Los cambios de folios, salidas y cortes aparecerán aquí.")
+  
