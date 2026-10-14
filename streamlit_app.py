@@ -314,7 +314,7 @@ def vista_impresion_con_qr(registro, parte="cliente", key="print_qr"):
     texto = primera if parte == "cliente" else segunda
     qr_data = generar_qr_bytes(registro) if QR_OK else None
     qr_img = (
-        f'<img alt="QR del vehículo" style="width:105px;height:105px" src="data:image/png;base64,{base64.b64encode(qr_data).decode("ascii")}">'
+        f'<img alt="QR del vehículo" style="width:128px;height:128px;image-rendering:pixelated" src="data:image/png;base64,{base64.b64encode(qr_data).decode("ascii")}">'
         if qr_data and parte == "cliente" else ""
     )
     seguro = html.escape(texto)
@@ -331,7 +331,7 @@ def vista_impresion_con_qr(registro, parte="cliente", key="print_qr"):
       <button id="{key}" style="padding:10px 14px;font-weight:bold;border:0;border-radius:6px;background:#174a7e;color:white">
         🖨️ Imprimir {('boleto del cliente + QR de salida' if parte == 'cliente' else 'llavero y contraseña')}
       </button>
-      <div style="margin-top:8px;font-size:12px">Se abrirá el diálogo de impresión del navegador. El ancho depende de la impresora configurada.</div>
+      <div style="margin-top:8px;font-size:12px">Para que salga el QR gráfico, usa esta impresión del navegador y selecciona la impresora térmica. La impresión Bluetooth de texto no imprime imágenes QR.</div>
       <div id="ticket_{key}" style="display:none;width:58mm;white-space:pre-wrap;font-size:10pt">{seguro}</div>
     </div>
     <script>
@@ -341,7 +341,7 @@ def vista_impresion_con_qr(registro, parte="cliente", key="print_qr"):
         if (!w) {{ alert("El navegador bloqueó la ventana. Permite ventanas emergentes para imprimir."); return; }}
         w.document.write('<html><head><title>Ticket CLUB PARK</title><style>@page{{size:58mm auto;margin:2mm}}body{{font-family:monospace;font-size:10pt;white-space:pre-wrap;width:54mm}}img{{display:block;margin:4px auto}}</style></head><body>' + body + '</body></html>');
         w.document.close(); w.focus();
-        setTimeout(() => w.print(), 300);
+        setTimeout(() => {{ w.focus(); w.print(); }}, 700);
       }});
     </script>
     """
@@ -603,36 +603,61 @@ def enlace_whatsapp(telefono, mensaje):
 
 
 def imprimir_bluetooth(texto, key_suffix):
-    # Web Bluetooth solo funciona en navegadores compatibles y con HTTPS.
+    """Impresión Bluetooth de texto; recuerda el dispositivo cuando Chrome lo permite.
+
+    Nota: Web Bluetooth no es compatible con muchas impresoras térmicas Bluetooth Classic/SPP.
+    Para tickets con QR gráfico debe usarse la impresión de navegador de arriba.
+    """
     texto_json = json.dumps(texto, ensure_ascii=False)
-    html = f"""
+    html_doc = f"""
     <div style="font-family:Arial,sans-serif">
       <button id="print_{key_suffix}" style="background:#22543D;color:white;padding:12px;
       border:0;border-radius:8px;font-weight:bold;width:100%">
-        🖨️ Conectar e imprimir por Bluetooth
+        🖨️ Imprimir con impresora guardada
+      </button>
+      <button id="forget_{key_suffix}" style="margin-top:6px;padding:7px;border:1px solid #999;border-radius:6px;width:100%">
+        Cambiar impresora guardada
       </button>
       <p id="status_{key_suffix}" style="font-size:12px"></p>
     </div>
     <script>
     const ticket = {texto_json};
     const btn = document.getElementById("print_{key_suffix}");
+    const forgetBtn = document.getElementById("forget_{key_suffix}");
     const status = document.getElementById("status_{key_suffix}");
+    const storageKey = "clubpark_bt_printer_id";
+    forgetBtn.addEventListener("click", () => {{
+      try {{ localStorage.removeItem(storageKey); }} catch(e) {{}}
+      status.textContent = "Preferencia borrada. Pulsa imprimir y selecciona la impresora que quedará guardada si el navegador lo permite.";
+    }});
     btn.addEventListener("click", async () => {{
       if (!navigator.bluetooth) {{
-        status.textContent = "Este navegador no admite Web Bluetooth. Prueba Chrome en Android.";
+        status.textContent = "Este navegador no admite Web Bluetooth. En Android prueba Chrome; si la impresora es Bluetooth Classic, usa una app/driver de impresión compatible.";
         return;
       }}
       btn.disabled = true;
-      status.textContent = "Selecciona la impresora en la ventana del sistema.";
       try {{
-        const device = await navigator.bluetooth.requestDevice({{
-          acceptAllDevices: true,
-          optionalServices: [
-            "00001101-0000-1000-8000-00805f9b34fb",
-            "000018f0-0000-1000-8000-00805f9b34fb"
-          ]
-        }});
-        const server = await device.gatt.connect();
+        let device = null;
+        let savedId = "";
+        try {{ savedId = localStorage.getItem(storageKey) || ""; }} catch(e) {{}}
+        if (savedId && navigator.bluetooth.getDevices) {{
+          const permitted = await navigator.bluetooth.getDevices();
+          device = permitted.find(d => d.id === savedId) || null;
+        }}
+        if (!device) {{
+          status.textContent = "Primera conexión: selecciona tu impresora. Intentaremos recordarla para las siguientes impresiones.";
+          device = await navigator.bluetooth.requestDevice({{
+            acceptAllDevices: true,
+            optionalServices: [
+              "00001101-0000-1000-8000-00805f9b34fb",
+              "000018f0-0000-1000-8000-00805f9b34fb"
+            ]
+          }});
+          try {{ localStorage.setItem(storageKey, device.id); }} catch(e) {{}}
+        }}
+        if (!device.gatt) throw new Error("La impresora no ofrece conexión GATT compatible con Web Bluetooth.");
+        device.addEventListener("gattserverdisconnected", () => {{ status.textContent = "Impresora desconectada. Pulsa imprimir para reconectar."; }});
+        const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
         const services = await server.getPrimaryServices();
         let characteristic = null;
         for (const service of services) {{
@@ -640,7 +665,7 @@ def imprimir_bluetooth(texto, key_suffix):
           characteristic = chars.find(c => c.properties.writeWithoutResponse || c.properties.write);
           if (characteristic) break;
         }}
-        if (!characteristic) throw new Error("La impresora no expone una característica GATT de escritura compatible.");
+        if (!characteristic) throw new Error("La impresora no expone una característica GATT de escritura compatible. Muchas térmicas usan Bluetooth Classic y requieren su app/driver.");
         const encoder = new TextEncoder();
         const bytes = encoder.encode(ticket + "\\n\\n\\n");
         const chunkSize = 180;
@@ -652,7 +677,7 @@ def imprimir_bluetooth(texto, key_suffix):
             await characteristic.writeValue(chunk);
           }}
         }}
-        status.textContent = "Datos enviados a la impresora. Verifica el ticket físico.";
+        status.textContent = "Datos enviados a " + (device.name || "la impresora guardada") + ". Verifica el ticket físico.";
       }} catch (e) {{
         status.textContent = "No se pudo imprimir: " + e.message;
       }} finally {{
@@ -661,7 +686,7 @@ def imprimir_bluetooth(texto, key_suffix):
     }});
     </script>
     """
-    st.components.v1.html(html, height=100)
+    st.components.v1.html(html_doc, height=145)
 
 
 # ---------------------------------------------------------------------
@@ -772,9 +797,30 @@ with tab_ing:
         tarifa = tarifa_default
         st.metric("Tarifa fija de la sucursal", f"${tarifa:,.2f} MXN")
         operador = st.text_input("Valet / operador", value=st.session_state.usuario_autenticado)
-    custodia = st.text_area("Objetos declarados y observaciones de custodia")
+    st.subheader("Observaciones y custodia")
+    sin_valores = st.checkbox("⚡ Sin objetos de valor declarados", key="ing_sin_valores")
+    if sin_valores:
+        custodia = "SIN OBJETOS DE VALOR DECLARADOS"
+        st.success("Se registrará: SIN OBJETOS DE VALOR DECLARADOS")
+    else:
+        custodia = st.text_area(
+            "Objetos declarados y observaciones de custodia",
+            placeholder="Ej. computadora portátil, mochila negra, cargador...",
+            key="ing_custodia_texto",
+        )
+    st.caption("Marca la opción rápida o describe los objetos que el cliente deja bajo resguardo.")
+    st.markdown("**📷 Fotografías de pertenencias adicionales (opcional)**")
+    foto_pertenencias_camara = st.camera_input("Fotografiar pertenencias del cliente", key="foto_pertenencias_camara")
+    fotos_pertenencias_archivos = st.file_uploader(
+        "O selecciona fotos de pertenencias", type=["jpg", "jpeg", "png"],
+        accept_multiple_files=True, key="fotos_pertenencias_archivos"
+    )
+    if foto_pertenencias_camara:
+        st.image(foto_pertenencias_camara, caption="Vista previa: pertenencias", width=220)
+    if fotos_pertenencias_archivos:
+        st.caption(f"Fotos adicionales seleccionadas: {len(fotos_pertenencias_archivos)}")
 
-    st.subheader("2. Fotografías obligatorias")
+    st.subheader("2. Fotografías obligatorias del vehículo")
     st.caption("Debes adjuntar las cuatro vistas antes de registrar el ingreso.")
     a, b = st.columns(2)
     with a:
@@ -820,6 +866,11 @@ with tab_ing:
             try:
                 for vista, archivo in archivos:
                     rutas[vista] = guardar_foto(archivo, folio, vista)
+                fotos_custodia = []
+                if foto_pertenencias_camara:
+                    fotos_custodia.append(guardar_foto(foto_pertenencias_camara, folio, "pertenencia_camara"))
+                for indice, archivo_extra in enumerate(fotos_pertenencias_archivos or [], start=1):
+                    fotos_custodia.append(guardar_foto(archivo_extra, folio, f"pertenencia_{indice}"))
                 registro = {
                     "id": folio,
                     "folio_numero": folio_numero,
@@ -833,6 +884,7 @@ with tab_ing:
                     "operador": operador.strip(),
                     "custodia": custodia.strip() or "Sin objetos declarados",
                     "fotos": rutas,
+                    "fotos_custodia": fotos_custodia,
                     "estado": "En Resguardo",
                     "registrado_por": st.session_state.usuario_autenticado,
                 }
@@ -865,7 +917,7 @@ with tab_ing:
                 st.warning("Instala qrcode[pil] para generar imágenes QR.")
             vista_impresion_con_qr(ultimo, "cliente", "imprimir_cliente_ingreso")
             vista_impresion_con_qr(ultimo, "llavero", "imprimir_contrasena_ingreso")
-            st.caption("También puedes usar la impresión Bluetooth de texto, pero la impresión gráfica con QR depende del navegador y de la impresora seleccionada.")
+            st.warning("IMPORTANTE: para imprimir el QR gráfico usa el botón 'Imprimir boleto del cliente + QR de salida' de arriba. El botón Bluetooth de texto solo imprime texto y no puede dibujar el QR. El QR se coloca antes del primer corte.")
             imprimir_partes_ticket(ultimo, "ingreso")
         else:
             st.code(st.session_state.ultimo_ticket, language="text")
@@ -910,6 +962,19 @@ with tab_list:
                         st.image(str(p), use_container_width=True)
                     else:
                         st.warning("Foto no disponible")
+            fotos_custodia_detalle = detalle.get("fotos_custodia", []) or []
+            if fotos_custodia_detalle:
+                st.markdown("**📷 Evidencia fotográfica de pertenencias**")
+                cols_custodia = st.columns(min(3, len(fotos_custodia_detalle)))
+                for i, ruta_extra in enumerate(fotos_custodia_detalle):
+                    p_extra = Path(ruta_extra)
+                    if not p_extra.is_absolute():
+                        p_extra = DATA_DIR / p_extra
+                    with cols_custodia[i % len(cols_custodia)]:
+                        if p_extra.exists():
+                            st.image(str(p_extra), caption=f"Pertenencia {i + 1}", use_container_width=True)
+                        else:
+                            st.warning(f"Foto de pertenencia {i + 1} no disponible")
 
             if es_global:
                 estados = ["En Resguardo", "Entregado", "Incidencia", "Cancelado"]
@@ -949,9 +1014,12 @@ with tab_salida:
     if metodo_busqueda == "Capturar folio":
         valor_busqueda = st.text_input("Folio del boleto", key="folio_buscar_salida").strip()
     elif metodo_busqueda == "Escanear QR con cámara":
-        imagen_qr_salida = st.camera_input("Apunta al QR del ticket", key="camara_qr_salida")
+        imagen_qr_salida = st.camera_input("Fotografía el QR del boleto (centrado, enfocado y con buena luz)", key="camara_qr_salida")
         if imagen_qr_salida:
-            valor_busqueda = leer_codigo_qr(Image.open(imagen_qr_salida)) or ""
+            valor_qr_leido = leer_codigo_qr(Image.open(imagen_qr_salida))
+            valor_busqueda = valor_qr_leido or ""
+            if not valor_qr_leido:
+                st.warning("No se pudo leer el QR de esta foto. Intenta acercar la cámara, enfocar el código o usa 'Subir imagen QR'.")
     else:
         archivo_qr_salida = st.file_uploader("Sube la imagen QR del ticket", type=["png", "jpg", "jpeg"], key="archivo_qr_salida")
         if archivo_qr_salida:
