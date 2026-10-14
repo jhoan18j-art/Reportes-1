@@ -385,15 +385,22 @@ with tab_imp:
     t_prev = st.session_state.get("ticket_activo", "Genera un ingreso de vehículo para visualizar el ticket.")
     st.text_area("Formato ESC/POS:", value=t_prev, height=350, key="txt_escpos")
 
-        js_bluetooth = """
+        # -------------------------------------------------------------------------
+# TAB 3: IMPRESIÓN BLUETOOTH
+# -------------------------------------------------------------------------
+with tab_imp:
+    st.markdown("#### 🖨️ Impresión Térmica Bluetooth (3 Secciones con Cortes)")
+    t_prev = st.session_state.get("ticket_activo", "Genera un ingreso de vehículo para visualizar el ticket.")
+    st.text_area("Formato ESC/POS:", value=t_prev, height=350, key="txt_escpos")
+
+    js_bluetooth = """
     <script>
     async function imprimirYCortar() {
         try {
-            // UUIDs estándar utilizados por la mayoría de las impresoras térmicas ESC/POS
             const thermalPrinterServices = [
-                '00001101-0000-1000-8000-00805f9b34fb', // Serial Port Profile (SPP)
-                '000018f0-0000-1000-8000-00805f9b34fb', // Servicio de Impresión Estándar
-                'e7810a71-73ae-499d-8c15-faa9aef0c3f2'  # Servicio alternativo común
+                '00001101-0000-1000-8000-00805f9b34fb',
+                '000018f0-0000-1000-8000-00805f9b34fb',
+                'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
             ];
 
             const device = await navigator.bluetooth.requestDevice({
@@ -403,7 +410,6 @@ with tab_imp:
 
             const server = await device.gatt.connect();
             
-            // Buscar el servicio disponible
             let service;
             const services = await server.getPrimaryServices();
             if (services.length > 0) {
@@ -417,8 +423,6 @@ with tab_imp:
 
             const texto = document.querySelector("textarea").value;
             const encoder = new TextEncoder();
-            
-            // Comando ESC/POS para corte de papel GS V 65 16
             const comandoCorte = new Uint8Array([0x1D, 0x56, 0x41, 0x10]);
             
             await characteristic.writeValue(encoder.encode(texto + "\\n\\n\\n"));
@@ -434,6 +438,7 @@ with tab_imp:
         🖨️ Imprimir Ticket de 3 Secciones vía Bluetooth
     </button>
     """
+    st.components.v1.html(js_bluetooth, height=80)
 
     st.components.v1.html(js_bluetooth, height=80)
 
