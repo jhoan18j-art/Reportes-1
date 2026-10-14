@@ -226,24 +226,56 @@ def guardar_evento_auditoria(tipo, detalle):
     os.replace(temporal, AUDIT_FILE)
 
 
+CODIGOS_SUCURSAL = {
+    "PAMPAS INSURGENTES": "PINS",
+    "PAMPAS COAPA": "PCOA",
+    "RAMMA": "RAM",
+    "SUSHITTO": "SUS",
+    "CARAJILLO POLANCO": "CARA",
+    "BENINGAN´S": "BEN",
+    "SANATORIO DURANGO": "SDUR",
+    "BARRANCA": "BARR",
+    "VETERINARIA": "VET",
+    "ROMANCE PALACE": "ROM",
+    "JUNGLA TLALPAN": "JTL",
+    "JUNGLA DIVISIÓN": "JDV",
+    "JUNGLA PICACHO": "JPI",
+    "JUNGLA EMPRESA": "JEM",
+    "SIPIRILY COAPA": "SIP",
+    "MAROMETA SATÉLITE": "MSAT",
+    "MAROMETA MARINA": "MMAR",
+    "SUMO STA. MONICA": "SSTA",
+    "SUMO ECHEGARAY": "SEC",
+    "RYOSHI": "RYO",
+    "ENCANTO": "ENC",
+    "E-BNI": "EBN",
+    "CHURRASQUERIA": "CHUR",
+}
+
+
 def codigo_sucursal(sucursal):
-    palabras = re.findall(r"[A-ZÁÉÍÓÚÜÑ0-9]+", str(sucursal).upper())
-    codigo = "".join(p[0] for p in palabras)[:4]
-    return codigo or "CP"
+    """Código estable y exclusivo para que los folios no choquen entre sucursales."""
+    nombre = str(sucursal or "").strip().upper()
+    if nombre in CODIGOS_SUCURSAL:
+        return CODIGOS_SUCURSAL[nombre]
+    palabras = re.findall(r"[A-ZÁÉÍÓÚÜÑ0-9]+", nombre)
+    return ("".join(p[0] for p in palabras)[:4] or "CP")
 
 
 def siguiente_numero_usado(sucursal, registros):
-    """Obtiene el mayor consecutivo encontrado para esa sucursal, sin reutilizar folios."""
+    """Obtiene el mayor consecutivo de esa sucursal, incluidos folios de versiones anteriores."""
     mayor = 0
-    prefijo = f"CP-{codigo_sucursal(sucursal)}-"
     for registro in registros:
         if registro.get("sucursal") != sucursal:
             continue
         folio = str(registro.get("id", ""))
-        if folio.startswith(prefijo):
+        # La sucursal ya está filtrada; así conservamos secuencias anteriores aunque
+        # haya cambiado el prefijo histórico del folio.
+        coincidencia = re.search(r"-(\d+)$", folio)
+        if coincidencia:
             try:
-                mayor = max(mayor, int(folio.rsplit("-", 1)[1]))
-            except (ValueError, IndexError):
+                mayor = max(mayor, int(coincidencia.group(1)))
+            except ValueError:
                 pass
         try:
             mayor = max(mayor, int(registro.get("folio_numero", 0) or 0))
@@ -393,7 +425,7 @@ def imprimir_partes_ticket(registro, sufijo):
     primera, segunda = crear_partes_ticket(registro)
     st.markdown("**Impresión 1: boleto del cliente**")
     st.code(primera, language="text")
-    imprimir_bluetooth(primera, f"{sufijo}_cliente")
+    imprimir_bluetooth(primera, f"{sufijo}_cliente", qr_payload=qr_payload(registro))
     st.markdown("**Impresión 2: llavero y contraseña de parabrisas**")
     st.code(segunda, language="text")
     imprimir_bluetooth(segunda, f"{sufijo}_contrasena")
@@ -602,18 +634,21 @@ def enlace_whatsapp(telefono, mensaje):
     return f"https://wa.me/{telefono}?text={urllib.parse.quote(mensaje)}"
 
 
-def imprimir_bluetooth(texto, key_suffix):
-    """Impresión Bluetooth de texto; recuerda el dispositivo cuando Chrome lo permite.
+def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
+    """Imprime texto y, opcionalmente, un QR ESC/POS en impresoras BLE compatibles.
 
-    Nota: Web Bluetooth no es compatible con muchas impresoras térmicas Bluetooth Classic/SPP.
-    Para tickets con QR gráfico debe usarse la impresión de navegador de arriba.
+    En tickets de vehículo, el QR se envía como comandos ESC/POS en vez de texto,
+    porque una impresora térmica no puede imprimir un QR desde una cadena normal.
+    La compatibilidad depende de que el modelo soporte ESC/POS QR y Web Bluetooth.
     """
     texto_json = json.dumps(texto, ensure_ascii=False)
+    qr_json = json.dumps(qr_payload, ensure_ascii=False)
+    etiqueta = "boleto + QR de salida" if qr_payload else "comprobante / texto"
     html_doc = f"""
     <div style="font-family:Arial,sans-serif">
       <button id="print_{key_suffix}" style="background:#22543D;color:white;padding:12px;
       border:0;border-radius:8px;font-weight:bold;width:100%">
-        🖨️ Imprimir con impresora guardada
+        🖨️ Imprimir {etiqueta} en impresora guardada
       </button>
       <button id="forget_{key_suffix}" style="margin-top:6px;padding:7px;border:1px solid #999;border-radius:6px;width:100%">
         Cambiar impresora guardada
@@ -622,6 +657,7 @@ def imprimir_bluetooth(texto, key_suffix):
     </div>
     <script>
     const ticket = {texto_json};
+    const qrPayload = {qr_json};
     const btn = document.getElementById("print_{key_suffix}");
     const forgetBtn = document.getElementById("forget_{key_suffix}");
     const status = document.getElementById("status_{key_suffix}");
@@ -632,7 +668,7 @@ def imprimir_bluetooth(texto, key_suffix):
     }});
     btn.addEventListener("click", async () => {{
       if (!navigator.bluetooth) {{
-        status.textContent = "Este navegador no admite Web Bluetooth. En Android prueba Chrome; si la impresora es Bluetooth Classic, usa una app/driver de impresión compatible.";
+        status.textContent = "Este navegador no admite Web Bluetooth. En Android prueba Chrome; si tu impresora usa Bluetooth clásico/SPP, utiliza su aplicación o controlador compatible.";
         return;
       }}
       btn.disabled = true;
@@ -656,8 +692,8 @@ def imprimir_bluetooth(texto, key_suffix):
           try {{ localStorage.setItem(storageKey, device.id); }} catch(e) {{}}
         }}
         if (!device.gatt) throw new Error("La impresora no ofrece conexión GATT compatible con Web Bluetooth.");
-        device.addEventListener("gattserverdisconnected", () => {{ status.textContent = "Impresora desconectada. Pulsa imprimir para reconectar."; }});
-        const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+        if (device.gatt.connected === false) await device.gatt.connect();
+        const server = device.gatt;
         const services = await server.getPrimaryServices();
         let characteristic = null;
         for (const service of services) {{
@@ -665,9 +701,38 @@ def imprimir_bluetooth(texto, key_suffix):
           characteristic = chars.find(c => c.properties.writeWithoutResponse || c.properties.write);
           if (characteristic) break;
         }}
-        if (!characteristic) throw new Error("La impresora no expone una característica GATT de escritura compatible. Muchas térmicas usan Bluetooth Classic y requieren su app/driver.");
+        if (!characteristic) throw new Error("No se encontró una característica de escritura compatible. Muchas térmicas Bluetooth clásico necesitan su app/controlador.");
         const encoder = new TextEncoder();
-        const bytes = encoder.encode(ticket + "\\n\\n\\n");
+        let bytes;
+        if (qrPayload) {{
+          // Divide el boleto antes de la línea de corte para imprimir el QR encima de ella.
+          const marcador = "[ CORTE ]";
+          const posicion = ticket.indexOf(marcador);
+          const prefijoTexto = posicion >= 0 ? ticket.slice(0, posicion) : ticket;
+          const sufijoTexto = posicion >= 0 ? ticket.slice(posicion) : "";
+          const qrData = encoder.encode(qrPayload);
+          // ESC/POS: inicializar, seleccionar QR modelo 2, tamaño, corrección M,
+          // almacenar el símbolo e imprimirlo. Requiere firmware ESC/POS compatible.
+          const setup = [
+            0x1B,0x40,
+            0x1D,0x28,0x6B,0x04,0x00,0x31,0x41,0x32,0x00,
+            0x1D,0x28,0x6B,0x03,0x00,0x31,0x43,0x06,
+            0x1D,0x28,0x6B,0x03,0x00,0x31,0x45,0x31
+          ];
+          const longitud = qrData.length + 3;
+          const almacenar = [0x1D,0x28,0x6B,longitud & 0xFF,(longitud >> 8) & 0xFF,0x31,0x50,0x30];
+          const imprimirQr = [0x1D,0x28,0x6B,0x03,0x00,0x31,0x51,0x30];
+          const prefijo = encoder.encode(prefijoTexto);
+          const leyenda = encoder.encode("\\nESCANEE PARA REGISTRAR LA SALIDA\\n\\n");
+          const sufijo = encoder.encode(sufijoTexto + "\\n\\n\\n");
+          const partes = [prefijo, Uint8Array.from(setup), Uint8Array.from(almacenar), qrData, Uint8Array.from(imprimirQr), leyenda, sufijo];
+          const total = partes.reduce((n, parte) => n + parte.length, 0);
+          bytes = new Uint8Array(total);
+          let offset = 0;
+          for (const parte of partes) {{ bytes.set(parte, offset); offset += parte.length; }}
+        }} else {{
+          bytes = encoder.encode(ticket + "\\n\\n\\n");
+        }}
         const chunkSize = 180;
         for (let i = 0; i < bytes.length; i += chunkSize) {{
           const chunk = bytes.slice(i, i + chunkSize);
@@ -677,7 +742,7 @@ def imprimir_bluetooth(texto, key_suffix):
             await characteristic.writeValue(chunk);
           }}
         }}
-        status.textContent = "Datos enviados a " + (device.name || "la impresora guardada") + ". Verifica el ticket físico.";
+        status.textContent = "Datos enviados a " + (device.name || "la impresora guardada") + ". Verifica el papel: el QR requiere soporte ESC/POS QR en la impresora.";
       }} catch (e) {{
         status.textContent = "No se pudo imprimir: " + e.message;
       }} finally {{
@@ -687,6 +752,7 @@ def imprimir_bluetooth(texto, key_suffix):
     </script>
     """
     st.components.v1.html(html_doc, height=145)
+
 
 
 # ---------------------------------------------------------------------
@@ -1132,6 +1198,28 @@ with tab_salida:
             comprobante_reciente.get("registro", {}),
             "imprimir_comprobante_cobro_reciente",
         )
+        pago_reciente = comprobante_reciente.get("pago", {})
+        registro_reciente = comprobante_reciente.get("registro", {})
+        texto_comprobante = "\n".join([
+            "CLUB PARK",
+            "VALET Y ESTACIONAMIENTOS S.A. DE C.V.",
+            "COMPROBANTE DE COBRO",
+            "--------------------------------",
+            f"Sucursal: {registro_reciente.get('sucursal', '')}",
+            f"Folio: {registro_reciente.get('id', '')}",
+            f"Vehiculo: {registro_reciente.get('marca', '')} {registro_reciente.get('placas', '')}",
+            f"Fecha: {pago_reciente.get('fecha_hora', '')}",
+            f"Importe: ${dinero(pago_reciente.get('importe')):,.2f} MXN",
+            f"Metodo: {pago_reciente.get('metodo', '')}",
+            f"Estado: {pago_reciente.get('estado', '')}",
+            f"Referencia: {pago_reciente.get('referencia', '') or 'No aplica'}",
+            f"Atendio: {pago_reciente.get('usuario', '')}",
+            "--------------------------------",
+            "Conserve este comprobante.",
+            "Gracias por su preferencia.",
+        ])
+        st.markdown("**Impresión térmica Bluetooth del comprobante**")
+        imprimir_bluetooth(texto_comprobante, f"comprobante_{registro_reciente.get('id', 'reciente')}")
         st.download_button(
             "⬇️ Descargar comprobante en texto",
             data="CLUB PARK\nCOMPROBANTE DE COBRO\n" + "\n".join(
@@ -1868,18 +1956,6 @@ with tab_aud:
     c3.metric("Entregados", entregados)
 
     if visibles:
-        st.markdown("#### Revisión de registros")
-        df_aud = pd.DataFrame(visibles)
-        sucursales_aud = ["Todas"] + sorted(df_aud["sucursal"].dropna().astype(str).unique().tolist())
-        suc_aud = st.selectbox("Sucursal para auditar", sucursales_aud, key="aud_sucursal")
-        if suc_aud != "Todas":
-            df_aud = df_aud[df_aud["sucursal"] == suc_aud]
-        st.dataframe(
-            df_aud.reindex(columns=["id", "fecha", "sucursal", "marca", "placas", "tarifa", "operador", "estado"]),
-            use_container_width=True,
-            hide_index=True,
-        )
-
         st.markdown("#### Validación de las cuatro fotografías")
         for registro in visibles[:100]:
             faltan = []
@@ -1907,9 +1983,23 @@ with tab_aud:
 
     if es_contador:
         st.divider()
+        st.markdown("#### Conteo y consecutivo de folios por sucursal")
+        st.caption("Cada sucursal tiene un prefijo exclusivo. El consecutivo continúa al día siguiente y no se reinicia al cerrar caja.")
+        config_folios = cargar_config()
+        resumen_folios = []
+        for sucursal_folio_resumen in SUCURSALES:
+            maximo_folio_resumen = siguiente_numero_usado(sucursal_folio_resumen, st.session_state.vehiculos)
+            siguiente_configurado_resumen = int(config_folios["siguiente_folio"].get(sucursal_folio_resumen, 1))
+            resumen_folios.append({
+                "Sucursal": sucursal_folio_resumen,
+                "Prefijo exclusivo": f"CP-{codigo_sucursal(sucursal_folio_resumen)}-",
+                "Último consecutivo utilizado": maximo_folio_resumen,
+                "Siguiente consecutivo": max(siguiente_configurado_resumen, maximo_folio_resumen + 1),
+                "Vehículos registrados": sum(1 for reg in st.session_state.vehiculos if reg.get("sucursal") == sucursal_folio_resumen),
+            })
+        st.dataframe(pd.DataFrame(resumen_folios), use_container_width=True, hide_index=True)
         st.markdown("#### Configuración de folios por sucursal")
         st.caption("Define el siguiente consecutivo. El sistema nunca bajará del máximo ya utilizado en esa sucursal para evitar reutilizar folios.")
-        config_folios = cargar_config()
         suc_folio_admin = st.selectbox("Sucursal para configurar folio", SUCURSALES, key="admin_sucursal_folio")
         valor_actual = int(config_folios["siguiente_folio"].get(suc_folio_admin, 1))
         st.write(f"**Siguiente folio configurado:** {valor_actual}")
@@ -1948,6 +2038,144 @@ with tab_aud:
             st.dataframe(pd.DataFrame(historial_folios), use_container_width=True, hide_index=True)
         else:
             st.info("Todavía no hay cambios manuales de folio.")
+
+        st.markdown("#### Reinicio administrativo de datos operativos")
+        st.warning(
+            "Esta herramienta es exclusiva del Contador Auditor. Antes de reiniciar, descarga el respaldo. "
+            "El historial de auditoría se conserva y los consecutivos no se reinician salvo que marques la opción correspondiente."
+        )
+        cierres_file_admin = DATA_DIR / "cierres_diarios_sucursal.json"
+        gastos_file_admin = DATA_DIR / "gastos_operativos.json"
+        cortes_file_admin = DATA_DIR / "cortes_caja.json"
+        config_admin_backup = cargar_config()
+        try:
+            cierres_admin_backup = json.loads(cierres_file_admin.read_text(encoding="utf-8")) if cierres_file_admin.exists() else []
+        except (OSError, json.JSONDecodeError):
+            cierres_admin_backup = []
+        try:
+            gastos_admin_backup = json.loads(gastos_file_admin.read_text(encoding="utf-8")) if gastos_file_admin.exists() else []
+        except (OSError, json.JSONDecodeError):
+            gastos_admin_backup = []
+        try:
+            cortes_admin_backup = json.loads(cortes_file_admin.read_text(encoding="utf-8")) if cortes_file_admin.exists() else []
+        except (OSError, json.JSONDecodeError):
+            cortes_admin_backup = []
+        respaldo_admin = {
+            "generado_en": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "vehiculos": st.session_state.vehiculos,
+            "cierres_diarios": cierres_admin_backup,
+            "gastos_operativos": gastos_admin_backup,
+            "cortes_caja": cortes_admin_backup,
+            "configuracion_folios": config_admin_backup,
+        }
+        st.download_button(
+            "📦 Descargar respaldo antes de reiniciar",
+            data=json.dumps(respaldo_admin, ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name=f"respaldo_clubpark_{datetime.now():%Y%m%d_%H%M%S}.json",
+            mime="application/json",
+            key="descargar_respaldo_antes_reinicio",
+        )
+        alcance_reinicio = st.radio(
+            "Alcance del reinicio",
+            ["Solo una sucursal", "Toda la aplicación"],
+            horizontal=True,
+            key="alcance_reinicio_admin",
+        )
+        sucursal_reinicio = st.selectbox(
+            "Sucursal que se reiniciará",
+            SUCURSALES,
+            key="sucursal_reinicio_admin",
+            disabled=alcance_reinicio == "Toda la aplicación",
+        )
+        reiniciar_folios = st.checkbox(
+            "También reiniciar el consecutivo de folios a 1 (puede reutilizar números históricos)",
+            value=False,
+            key="reiniciar_folios_admin",
+        )
+        texto_confirmacion = "REINICIAR TODO" if alcance_reinicio == "Toda la aplicación" else f"REINICIAR {sucursal_reinicio}"
+        confirmacion_reinicio = st.text_input(
+            f'Para confirmar, escribe exactamente: {texto_confirmacion}',
+            key="texto_confirmacion_reinicio_admin",
+        )
+        if st.button(
+            "🧹 Reiniciar datos operativos seleccionados",
+            type="secondary",
+            disabled=confirmacion_reinicio.strip() != texto_confirmacion,
+            key="ejecutar_reinicio_admin",
+        ):
+            reiniciar_todo = alcance_reinicio == "Toda la aplicación"
+            sucursales_objetivo = set(SUCURSALES if reiniciar_todo else [sucursal_reinicio])
+            registros_borrados = [r for r in st.session_state.vehiculos if r.get("sucursal") in sucursales_objetivo]
+            registros_conservar = [r for r in st.session_state.vehiculos if r.get("sucursal") not in sucursales_objetivo]
+            fotos_borradas = 0
+            for registro_borrado in registros_borrados:
+                rutas = []
+                for vista in ("frente", "izquierda", "derecha", "trasera"):
+                    ruta = ruta_foto(registro_borrado, vista)
+                    if ruta:
+                        rutas.append(ruta)
+                for ruta_extra in registro_borrado.get("fotos_custodia", []) or []:
+                    try:
+                        ruta = Path(ruta_extra)
+                        if not ruta.is_absolute():
+                            ruta = DATA_DIR / ruta
+                        rutas.append(ruta)
+                    except (TypeError, ValueError):
+                        pass
+                for ruta in rutas:
+                    try:
+                        if ruta.exists() and ruta.is_file():
+                            ruta.unlink()
+                            fotos_borradas += 1
+                    except OSError:
+                        pass
+            if guardar_bd(registros_conservar):
+                st.session_state.vehiculos = registros_conservar
+                for archivo_datos, lista_datos in (
+                    (cierres_file_admin, cierres_admin_backup),
+                    (gastos_file_admin, gastos_admin_backup),
+                    (cortes_file_admin, cortes_admin_backup),
+                ):
+                    if reiniciar_todo:
+                        filtrados = []
+                    else:
+                        filtrados = [d for d in lista_datos if d.get("sucursal") not in sucursales_objetivo]
+                    try:
+                        archivo_datos.write_text(json.dumps(filtrados, ensure_ascii=False, indent=2), encoding="utf-8")
+                    except OSError as exc:
+                        st.error(f"No se pudo actualizar {archivo_datos.name}: {exc}")
+                if reiniciar_folios:
+                    config_nueva = cargar_config()
+                    for suc in sucursales_objetivo:
+                        anterior = int(config_nueva["siguiente_folio"].get(suc, 1))
+                        config_nueva["siguiente_folio"][suc] = 1
+                        config_nueva.setdefault("historial_folios", []).insert(0, {
+                            "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "usuario": st.session_state.usuario_autenticado,
+                            "sucursal": suc,
+                            "anterior": anterior,
+                            "nuevo": 1,
+                            "motivo": "Reinicio administrativo de datos",
+                        })
+                    guardar_config(config_nueva)
+                guardar_evento_auditoria(
+                    "REINICIO ADMINISTRATIVO",
+                    f"Alcance: {'todas las sucursales' if reiniciar_todo else sucursal_reinicio}; "
+                    f"registros eliminados: {len(registros_borrados)}; fotos eliminadas: {fotos_borradas}; "
+                    f"reinicio de folios: {'sí' if reiniciar_folios else 'no'}",
+                )
+                ultimo_comprobante = st.session_state.get("ultimo_comprobante_cobro", {})
+                sucursal_comprobante = (ultimo_comprobante.get("registro") or {}).get("sucursal")
+                if reiniciar_todo or sucursal_comprobante in sucursales_objetivo:
+                    st.session_state.pop("ultimo_comprobante_cobro", None)
+                ultimo_folio_sesion = st.session_state.get("ultimo_folio")
+                if any(r.get("id") == ultimo_folio_sesion for r in registros_borrados):
+                    st.session_state.pop("ultimo_folio", None)
+                st.success(
+                    f"Reinicio terminado. Registros eliminados: {len(registros_borrados)}; "
+                    f"fotografías eliminadas: {fotos_borradas}. El historial de auditoría se conservó."
+                )
+                st.rerun()
 
         st.markdown("#### Administración de registros")
         st.warning("Eliminar un registro es una acción permanente. Descarga un reporte antes de continuar.")
@@ -1989,4 +2217,3 @@ if es_contador:
         st.dataframe(pd.DataFrame(eventos), use_container_width=True, hide_index=True)
     else:
         st.info("Los cambios de folios, salidas y cortes aparecerán aquí.")
-  
