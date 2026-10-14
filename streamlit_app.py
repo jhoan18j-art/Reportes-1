@@ -4,7 +4,7 @@ CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.
 Sistema Inteligente de Control Operativo - Producción Total
 - Autenticación Híbrida (QR Sucursales + Supervisores Globales + Contador Auditor)
 - Captura Multivista (4 Fotografías obligatorias por vehículo)
-- Generador de Ticket Térmico de 3 Secciones con Cortes ESC/POS
+- Impresión Térmica Directa Bluetooth ESC/POS al registrar
 - Módulo Ejecutivo de Rentabilidad, Excel Oficial, WhatsApp y Auditoría
 """
 
@@ -12,7 +12,7 @@ import io
 import json
 import os
 import uuid
-from datetime import datetime, date, timedelta
+from datetime import datetime
 import pandas as pd
 import streamlit as st
 from PIL import Image
@@ -21,8 +21,7 @@ from PIL import Image
 OPENPYXL_OK = False
 try:
     import openpyxl
-    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import PatternFill, Font, Alignment
     OPENPYXL_OK = True
 except ImportError:
     pass
@@ -34,7 +33,6 @@ os.makedirs(DATA_DIR, exist_ok=True)
 DB_VEHICULOS_FILE = os.path.join(DATA_DIR, "vehiculos_produccion_db.json")
 FOTOS_VEH_DIR = os.path.join(DATA_DIR, "fotos_multivista_prod")
 os.makedirs(FOTOS_VEH_DIR, exist_ok=True)
-NOTIF_LOG_FILE = os.path.join(DATA_DIR, "bitacora_notificaciones_prod.json")
 
 def cargar_bd():
     if os.path.exists(DB_VEHICULOS_FILE):
@@ -68,13 +66,10 @@ PRECIOS_SUCURSALES = {
 }
 SUCURSALES_LISTA = ["-- Selecciona la Sucursal --"] + sorted(list(PRECIOS_SUCURSALES.keys()))
 
-# Accesos Híbridos (Contador con máxima jerarquía, Supervisores Globales y QR por Sucursal)
 ACCESOS_QR_Y_ROLES = {
     "CPV-GLOBAL-AUDITOR-2026": {"nombre": "Víctor (Contador)", "sucursal": "TODAS", "rol": "Contador Auditor (Máxima Jerarquía)"},
     "CPV-GLOBAL-JESUS-2026": {"nombre": "José de Jesús", "sucursal": "TODAS", "rol": "Supervisor Global"},
     "CPV-GLOBAL-VICTOR-2026": {"nombre": "Víctor Manuel", "sucursal": "TODAS", "rol": "Supervisor Global"},
-    
-    # Tokens QR específicos por Sucursal
     "CPV-QR-PAMPAS-INS": {"nombre": "Encargado Pampas Ins.", "sucursal": "PAMPAS INSURGENTES", "rol": "Supervisor de Sucursal"},
     "CPV-QR-RAMMA": {"nombre": "Encargado Ramma", "sucursal": "RAMMA", "rol": "Supervisor de Sucursal"},
     "CPV-QR-SUSHITTO": {"nombre": "Encargado Sushitto", "sucursal": "SUSHITTO", "rol": "Supervisor de Sucursal"},
@@ -127,31 +122,113 @@ def generar_enlace_whatsapp(telefono: str, mensaje: str) -> str:
     import urllib.parse
     return f"https://wa.me/{tel_clean}?text={urllib.parse.quote(mensaje)}"
 
+def generar_excel_oficial(df):
+    output = io.BytesIO()
+    if OPENPYXL_OK:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Reporte Operativo"
+        
+        ws.merge_cells("A1:G1")
+        title_cell = ws["A1"]
+        title_cell.value = "CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V."
+        title_cell.font = Font(name="Arial", size=14, bold=True, color="FFFFFF")
+        title_cell.fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        headers = ["FOLIO ID", "FECHA Y HORA", "SUCURSAL", "MARCA/MODELO", "PLACAS", "TARIFA ($)", "OPERADOR"]
+        ws.append([])
+        ws.append(headers)
+        
+        row_idx = 5
+        for _, r in df.iterrows():
+            ws.append([
+                r.get("id", ""), r.get("fecha", ""), r.get("sucursal", ""),
+                r.get("marca", ""), r.get("placas", ""), r.get("tarifa", 0.0),
+                r.get("operador", "")
+            ])
+            ws.cell(row=row_idx, column=6).number_format = '"$"#,##0.00'
+            row_idx += 1
+
+        wb.save(output)
+    else:
+        df.to_excel(output, index=False, engine="openpyxl")
+    output.seek(0)
+    return output
+
+def componente_impresion_bluetooth(texto_ticket, key_suffix=""):
+    """Componente JavaScript autocontenido para imprimir directamente en impresoras térmicas ESC/POS."""
+    # Sanitizamos el texto para inyectarlo de forma segura en JS
+    texto_js = json.dumps(texto_ticket)
+    
+    js_code = f"""
+    <script>
+    async function conectarEImprimir() {{
+        const btn = document.getElementById("btn_print_{key_suffix}");
+        try {{
+            btn.innerText = "⏳ Conectando a impresora...";
+            btn.disabled = true;
+
+            const thermalPrinterServices = [
+                '00001101-0000-1000-8000-00805f9b34fb',
+                '000018f0-0000-1000-8000-00805f9b34fb',
+                'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
+            ];
+
+            const device = await navigator.bluetooth.requestDevice({{
+                acceptAllDevices: true,
+                optionalServices: thermalPrinterServices
+            }});
+
+            const server = await device.gatt.connect();
+            const services = await server.getPrimaryServices();
+            
+            if (services.length === 0) {{
+                throw new Error("No se encontraron servicios Bluetooth disponibles.");
+            }}
+
+            const service = services[0];
+            const characteristics = await service.getCharacteristics();
+            const characteristic = characteristics.find(c => c.properties.write || c.properties.writeWithoutResponse) || characteristics[0];
+
+            const texto = {texto_js};
+            const encoder = new TextEncoder();
+            
+            // Comando ESC/POS GS V 65 16 para corte completo de papel
+            const comandoCorte = new Uint8Array([0x1D, 0x56, 0x41, 0x10]);
+
+            await characteristic.writeValue(encoder.encode(texto + "\\n\\n\\n"));
+            await characteristic.writeValue(comandoCorte);
+
+            btn.innerText = "✅ ¡Ticket Impreso!";
+            btn.style.backgroundColor = "#276749";
+            setTimeout(() => {{
+                btn.innerText = "🖨️ Re-imprimir Ticket vía Bluetooth";
+                btn.disabled = false;
+            }}, 3000);
+
+        }} catch (error) {{
+            alert("Error al imprimir Bluetooth: " + error.message);
+            btn.innerText = "🖨️ Reintentar Impresión Bluetooth";
+            btn.style.backgroundColor = "#C53030";
+            btn.disabled = false;
+        }}
+    }}
+    </script>
+    <button id="btn_print_{key_suffix}" onclick="conectarEImprimir()" 
+            style="background-color:#22543D; color:white; padding:14px 20px; border:none; 
+                   border-radius:8px; font-weight:bold; font-size:16px; width:100%; cursor:pointer;">
+        🖨️ CONECTAR E IMPRIMIR TICKET EN IMPRESORA BLUETOOTH
+    </button>
+    """
+    st.components.v1.html(js_code, height=70)
+
 st.set_page_config(
     page_title="Club Park - Sistema de Producción Total",
     page_icon="🚗",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-st.markdown("""
-    <style>
-        .ticket-box {
-            background-color: #ffffff;
-            border: 2px dashed #22543D;
-            padding: 15px;
-            border-radius: 8px;
-            font-family: monospace;
-            color: #1a202c;
-            font-size: 0.82rem;
-        }
-        .stButton>button {
-            border-radius: 8px;
-            font-weight: 600;
-            min-height: 48px;
-        }
-    </style>
-""", unsafe_allow_html=True)
 
 if "usuario_autenticado" not in st.session_state:
     st.session_state.usuario_autenticado = None
@@ -162,14 +239,13 @@ if "vehiculos" not in st.session_state:
     st.session_state.vehiculos = cargar_bd()
 
 # =========================================================================
-# PANTALLA DE ACCESO (LOGIN HÍBRIDO QR / TOKEN)
+# ACCESO (LOGIN)
 # =========================================================================
 if st.session_state.usuario_autenticado is None:
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
     with col_l2:
         st.markdown("<h1 style='text-align: center;'>🚗 CLUB PARK</h1>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center; color: #4A5568;'>Acceso Híbrido (QR de Sucursal / Contador / Supervisor)</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #718096;'>Escanea tu código QR corporativo para iniciar sesión</p>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: center; color: #4A5568;'>Acceso Híbrido</h3>", unsafe_allow_html=True)
         st.markdown("---")
 
         metodo = st.radio("Método de Identificación:", ["📷 Escanear con Cámara", "📁 Subir Imagen QR", "🔑 Token Manual"], horizontal=True)
@@ -198,17 +274,6 @@ if st.session_state.usuario_autenticado is None:
                 st.rerun()
             else:
                 st.error("❌ Código QR o token no reconocido.")
-
-        with st.expander("📌 Ver Tokens del Sistema (Administración)", expanded=False):
-            st.markdown("**Contador y Supervisores Globales:**")
-            st.write("• Contador (Máxima Jerarquía): `CPV-GLOBAL-AUDITOR-2026`")
-            st.write("• José de Jesús: `CPV-GLOBAL-JESUS-2026`")
-            st.write("• Víctor Manuel: `CPV-GLOBAL-VICTOR-2026`")
-            st.markdown("---")
-            st.markdown("**Ejemplos de Sucursales:**")
-            for tk, inf in ACCESOS_QR_Y_ROLES.items():
-                if "GLOBAL" not in tk:
-                    st.write(f"• {inf['sucursal']} ➔ `{tk}`")
         st.stop()
 
 # =========================================================================
@@ -218,7 +283,7 @@ es_contador = ("Contador" in st.session_state.rol)
 es_global = (es_contador or st.session_state.rol in ["Supervisor Global"])
 
 st.markdown(f"### CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.")
-st.markdown(f"**Usuario:** `{st.session_state.usuario_autenticado}` | **Rol:** `{st.session_state.rol}` | **Sucursal:** `{'Todas (Global - Máxima Jerarquía)' if es_global else st.session_state.sucursal_asignada}`")
+st.markdown(f"**Usuario:** `{st.session_state.usuario_autenticado}` | **Rol:** `{st.session_state.rol}` | **Sucursal:** `{'Todas (Global)' if es_global else st.session_state.sucursal_asignada}`")
 
 if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
     st.session_state.usuario_autenticado = None
@@ -226,15 +291,17 @@ if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
     st.session_state.rol = None
     st.rerun()
 
-# Pestañas del Sistema Completo
 tab_ing, tab_list, tab_imp, tab_rep, tab_aud = st.tabs([
     "📥 Ingreso y 4 Fotografías",
     "📋 Vehículos Registrados",
-    "🖨️ Impresión Térmica Bluetooth",
-    "📊 Reportes y Rentabilidad Excel",
-    "🕵️ Auditoría, Alertas y WhatsApp"
+    "🖨️ Re-Impresión Térmica",
+    "📊 Reportes y Excel",
+    "🕵️ Auditoría y WhatsApp"
 ])
 
+# -------------------------------------------------------------------------
+# TAB 1: INGRESO DE VEHÍCULOS E IMPRESIÓN DIRECTA
+# -------------------------------------------------------------------------
 with tab_ing:
     st.markdown("#### 1. Datos del Vehículo y Recepción")
     c1, c2 = st.columns(2)
@@ -254,11 +321,9 @@ with tab_ing:
         operador_v = st.text_input("Valet / Operador:", value=st.session_state.usuario_autenticado, key="op_valet")
 
     st.markdown("#### 2. Custodia de Objetos y Observaciones")
-    custodia_v = st.text_area("Objetos en custodia (Celulares, aparatos electrónicos, armas, efectivo declarados):", placeholder="Ej. Deja 1 Celular en guantera, lentes de sol.", key="op_custodia")
+    custodia_v = st.text_area("Objetos en custodia (Celulares, armas, efectivo declarado):", key="op_custodia")
 
     st.markdown("#### 3. Captura Multivista Obligatoria (4 Fotografías)")
-    st.caption("Para proteger el patrimonio y evitar falsas reclamaciones de daños, toma o carga las 4 vistas del vehículo:")
-    
     cf1, cf2 = st.columns(2)
     with cf1:
         f_frente = st.file_uploader("📷 1. Vista Frontal", type=["jpg", "jpeg", "png"], key="img_f")
@@ -309,27 +374,16 @@ ENTRADA: {ahora_s}    SALIDA: _______
 --------------------------------
 NO NOS HACEMOS RESPONSABLES POR
 OBJETOS COMO SON: EFECTIVO, CHEQUES,
-ARMAS, BOLSAS, TARJETAS, CELULARES,
-APARATOS ELECTRONICOS.
-
-SIN LA PRESENTACION DE ESTE TALON,
-NO SE ENTREGARA EL VEHICULO.
-LEER CLAUSULAS AL REVERSO.
+ARMAS, BOLSAS, TARJETAS, CELULARES.
 ================================
            [ CORTE ]
 ================================
       BOLETO SIN VALOR LLAVERO
-CLUB PARK VALET Y ESTACIONAMIENTOS
-FOLIO: {folio_id}
-MARCA: {marca_v}
-PLACA: {placas_v} | COLOR: {color_v}
-UBICACIÓN: _____________________
+FOLIO: {folio_id} | PLACA: {placas_v}
 ================================
            [ CORTE ]
 ================================
-          CONTRASEÑAS
      BOLETO SIN VALOR PARABRISAS
-CLUB PARK VALET Y ESTACIONAMIENTOS
 FOLIO: {folio_id}
 ================================
 """
@@ -352,9 +406,19 @@ FOLIO: {folio_id}
             st.session_state.vehiculos.insert(0, nuevo_registro)
             guardar_bd(st.session_state.vehiculos)
             
-            st.success(f"✅ ¡Ingreso registrado con éxito! Folio: `{folio_id}` | 4 fotografías guardadas.")
-            st.session_state["ticket_activo"] = ticket_escpos
+            st.session_state["ultimo_ticket"] = ticket_escpos
+            st.session_state["ultimo_folio"] = folio_id
+            st.success(f"✅ ¡Ingreso registrado exitosamente! Folio: `{folio_id}`")
 
+    # Muestra el botón de impresión inmediata al registrar el ticket
+    if "ultimo_ticket" in st.session_state:
+        st.markdown("---")
+        st.markdown(f"### 🖨️ Impresión Inmediata - Ticket Folio `{st.session_state.get('ultimo_folio', '')}`")
+        componente_impresion_bluetooth(st.session_state["ultimo_ticket"], key_suffix="ingreso")
+
+# -------------------------------------------------------------------------
+# TAB 2: LISTADO DE VEHÍCULOS
+# -------------------------------------------------------------------------
 with tab_list:
     st.markdown("#### 📋 Listado General de Vehículos")
     if st.session_state.vehiculos:
@@ -380,134 +444,76 @@ with tab_list:
     else:
         st.info("No hay vehículos registrados.")
 
-with tab_imp:
-    st.markdown("#### 🖨️ Impresión Térmica Bluetooth (3 Secciones con Cortes)")
-    t_prev = st.session_state.get("ticket_activo", "Genera un ingreso de vehículo para visualizar el ticket.")
-    st.text_area("Formato ESC/POS:", value=t_prev, height=350, key="txt_escpos")
-
-        # -------------------------------------------------------------------------
-# TAB 3: IMPRESIÓN BLUETOOTH
+# -------------------------------------------------------------------------
+# TAB 3: RE-IMPRESIÓN TÉRMICA
 # -------------------------------------------------------------------------
 with tab_imp:
-    st.markdown("#### 🖨️ Impresión Térmica Bluetooth (3 Secciones con Cortes)")
-    t_prev = st.session_state.get("ticket_activo", "Genera un ingreso de vehículo para visualizar el ticket.")
-    
-    # Única declaración del componente con una clave limpia
-    st.text_area("Formato ESC/POS:", value=t_prev, height=350, key="txt_escpos_unico")
+    st.markdown("#### 🖨️ Re-Impresión de Tickets")
+    if st.session_state.vehiculos:
+        lista_folios = [v["id"] for v in st.session_state.vehiculos]
+        folio_sel = st.selectbox("Selecciona Folio a imprimir:", lista_folios, key="reprint_sel")
+        reg_sel = next((v for v in st.session_state.vehiculos if v["id"] == folio_sel), None)
+        
+        if reg_sel:
+            st.text_area("Formato ESC/POS:", value=reg_sel["ticket_texto"], height=280, key="txt_reprint")
+            componente_impresion_bluetooth(reg_sel["ticket_texto"], key_suffix="reimpresion")
+    else:
+        st.info("No hay registros disponibles para re-imprimir.")
 
-    js_bluetooth = """
-    <script>
-    async function imprimirYCortar() {
-        try {
-            const thermalPrinterServices = [
-                '00001101-0000-1000-8000-00805f9b34fb',
-                '000018f0-0000-1000-8000-00805f9b34fb',
-                'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
-            ];
+# -------------------------------------------------------------------------
+# TAB 4: REPORTES Y RENTABILIDAD EXCEL
+# -------------------------------------------------------------------------
+with tab_rep:
+    st.markdown("### 📊 Reportes de Operación y Rentabilidad")
+    if st.session_state.vehiculos:
+        df_rep = pd.DataFrame(st.session_state.vehiculos)
+        if not es_global:
+            df_rep = df_rep[df_rep["sucursal"] == st.session_state.sucursal_asignada]
 
-            const device = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: thermalPrinterServices
-            });
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Vehículos Registrados", len(df_rep))
+        m2.metric("Ingreso Total Acumulado", f"${df_rep['tarifa'].sum():,.2f} MXN")
+        m3.metric("Tarifa Promedio", f"${df_rep['tarifa'].mean():,.2f} MXN" if len(df_rep)>0 else "$0.00")
 
-            const server = await device.gatt.connect();
-            
-            let service;
-            const services = await server.getPrimaryServices();
-            if (services.length > 0) {
-                service = services[0];
-            } else {
-                throw new Error("No se encontraron servicios disponibles en el dispositivo.");
-            }
+        st.markdown("---")
+        excel_data = generar_excel_oficial(df_rep)
+        
+        st.download_button(
+            label="📥 Descargar Reporte en Excel (.xlsx)",
+            data=excel_data,
+            file_name=f"Reporte_ClubPark_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary"
+        )
+    else:
+        st.info("No hay registros para generar reportes.")
 
-            const characteristics = await service.getCharacteristics();
-            const characteristic = characteristics.find(c => c.properties.write || c.properties.writeWithoutResponse) || characteristics[0];
-
-            const texto = document.querySelector("textarea").value;
-            const encoder = new TextEncoder();
-            const comandoCorte = new Uint8Array([0x1D, 0x56, 0x41, 0x10]);
-            
-            await characteristic.writeValue(encoder.encode(texto + "\\n\\n\\n"));
-            await characteristic.writeValue(comandoCorte);
-
-            alert("¡Ticket impreso y cortado exitosamente!");
-        } catch (error) {
-            alert("Error de conexión Bluetooth: " + error.message);
-        }
-    }
-    </script>
-    <button onclick="imprimirYCortar()" style="background-color:#22543D; color:white; padding:12px 20px; border:none; border-radius:8px; font-weight:bold; width:100%; cursor:pointer;">
-        🖨️ Imprimir Ticket de 3 Secciones vía Bluetooth
-    </button>
-    """
-    st.components.v1.html(js_bluetooth, height=80)
-    
-
-# =========================================================================
-# MÓDULO DE AUDITORÍA, EVENTOS EXTRAORDINARIOS Y WHATSAPP
-# =========================================================================
+# -------------------------------------------------------------------------
+# TAB 5: AUDITORÍA Y ALERTAS WHATSAPP
+# -------------------------------------------------------------------------
 with tab_aud:
     st.markdown("### 🕵️ Auditoría, Eventos Extraordinarios y Alertas WhatsApp")
-    st.markdown("Control jerárquico exclusivo para el Contador Auditor y Supervisores Globales.")
-
+    
     if not es_contador and not es_global:
         st.warning("🔒 Esta sección está restringida para Supervisores Globales y el Contador Auditor.")
     else:
-        sub_a1, sub_a2, sub_a3 = st.tabs(["⚡ Eventos Extraordinarios", "📲 Alertas y WhatsApp", "🚨 Custodias y Hallazgos"])
+        st.success(f"🔓 Sesión de Auditoría Activa: **{st.session_state.usuario_autenticado}**")
+        
+        st.markdown("#### Notificaciones Instantáneas por WhatsApp")
+        c_wa1, c_wa2 = st.columns(2)
+        with c_wa1:
+            num_destino = st.text_input("Número WhatsApp Destino (10 dígitos):", value="5512345678")
+            suc_alerta = st.selectbox("Sucursal del Evento:", SUCURSALES_LISTA[1:])
+        with c_wa2:
+            tipo_evento = st.selectbox("Tipo de Evento:", ["Siniestro / Golpe", "Objeto Extraviado / Reclamación", "Sin Boleto / Pérdida", "Corte de Caja Irregular"])
+            detalles_ev = st.text_area("Detalles del Incidente:")
 
-        with sub_a1:
-            st.markdown("#### ⚡ Programación de Eventos Extraordinarios")
-            c_ev1, c_ev2 = st.columns(2)
-            with c_ev1:
-                ev_suc = st.selectbox("Sucursal del Evento:", SUCURSALES_LISTA, key="ev_s")
-                ev_fec = st.date_input("Fecha del Evento:", value=date.today(), key="ev_d")
-            with c_ev2:
-                ev_bol = st.number_input("Boletos Estimados:", min_value=0, value=100, step=10, key="ev_b")
-                ev_cost = st.number_input("Costo por Boleto ($):", min_value=0.0, value=100.0, step=10.0, key="ev_c")
-
-            if st.button("💾 Guardar y Registrar Evento Extraordinario", type="primary", key="btn_save_evt"):
-                if ev_suc != "-- Selecciona la Sucursal --":
-                    ev_id = f"EVT-{uuid.uuid4().hex[:4].upper()}"
-                    ing_tot_ev = float(ev_bol) * float(ev_cost)
-                    evt_reg = {
-                        "id": ev_id,
-                        "fecha": ev_fec.strftime("%d/%m/%Y"),
-                        "sucursal": ev_suc,
-                        "marca": "EVENTO ESPECIAL",
-                        "color": "-",
-                        "placas": "ESPECIAL",
-                        "tarifa": ing_tot_ev,
-                        "operador": st.session_state.usuario_autenticado,
-                        "custodia": f"Evento extraordinario con {ev_bol} boletos estimados.",
-                        "fotos": {},
-                        "ticket_texto": f"EVENTO ESPECIAL - {ev_suc}\nTotal estimado: ${ing_tot_ev:,.2f}",
-                        "estado": "Programado"
-                    }
-                    st.session_state.vehiculos.insert(0, evt_reg)
-                    guardar_bd(st.session_state.vehiculos)
-                    st.success(f"✅ Evento registrado con ID `{ev_id}` y ${ing_tot_ev:,.2f} proyectados.")
-                    st.rerun()
-
-        with sub_a2:
-            st.markdown("#### 📲 Envío de Alertas y Notificaciones por WhatsApp")
-            st.markdown("Envía recordatorios rápidos y avisos operativos directamente a los encargados.")
+        if st.button("📲 Generar y Enviar Alerta por WhatsApp", type="primary"):
+            msg_wa = f"🚨 *ALERTA OPERATIVA CLUB PARK*\n" \
+                     f"🏢 *Sucursal:* {suc_alerta}\n" \
+                     f"⚠️ *Evento:* {tipo_evento}\n" \
+                     f"📝 *Detalles:* {detalles_ev}\n" \
+                     f"👤 *Reporta:* {st.session_state.usuario_autenticado} ({st.session_state.rol})"
             
-            tel_contacto = st.text_input("Teléfono móvil de destino (con clave país, ej. 5255...):", value="525500000000", key="w_tel")
-            msg_custom = st.text_area("Mensaje corporativo:", value="Hola, se requiere revisión de reportes y rentabilidad del turno en Club Park.", key="w_msg")
-            
-            if tel_contacto:
-                url_wa = generar_enlace_whatsapp(tel_contacto, msg_custom)
-                st.link_button("📲 Abrir y Enviar por WhatsApp", url_wa, use_container_width=True)
-
-        with sub_a3:
-            st.markdown("#### 🚨 Auditoría de Custodias y Objetos de Valor")
-            if st.session_state.vehiculos:
-                df_c = pd.DataFrame(st.session_state.vehiculos)
-                df_cust = df_c[df_c["custodia"].astype(str).str.strip() != ""]
-                if not df_cust.empty:
-                    for _, row in df_cust.iterrows():
-                        st.warning(f"⚠️ **Folio:** `{row['id']}` | Sucursal: **{row['sucursal']}**\n\n**Custodia:** {row['custodia']}")
-                else:
-                    st.success("✅ No hay custodias pendientes de entrega.")
-            else:
-                st.info("Sin registros.")
+            link_wa = generar_enlace_whatsapp(num_destino, msg_wa)
+            st.markdown(f"[👉 Haz clic aquí para abrir WhatsApp y enviar alerta]({link_wa})")
