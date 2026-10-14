@@ -318,13 +318,21 @@ def vista_impresion_con_qr(registro, parte="cliente", key="print_qr"):
         if qr_data and parte == "cliente" else ""
     )
     seguro = html.escape(texto)
+    if parte == "cliente" and qr_img:
+        # El QR queda en la parte inferior del boleto del cliente, antes de la línea de corte.
+        marca_corte = "[ CORTE ]"
+        if marca_corte in seguro:
+            antes, despues = seguro.split(marca_corte, 1)
+            seguro = antes + '<br><center>' + qr_img + '</center><center><b>ESCANEE PARA REGISTRAR LA SALIDA</b></center><br>' + marca_corte + despues
+        else:
+            seguro += '<br><center>' + qr_img + '</center><center><b>ESCANEE PARA REGISTRAR LA SALIDA</b></center>'
     html_doc = f"""
     <div style="font-family:monospace;color:#111">
       <button id="{key}" style="padding:10px 14px;font-weight:bold;border:0;border-radius:6px;background:#174a7e;color:white">
-        🖨️ Imprimir {('boleto del cliente + QR' if parte == 'cliente' else 'llavero y contraseña')}
+        🖨️ Imprimir {('boleto del cliente + QR de salida' if parte == 'cliente' else 'llavero y contraseña')}
       </button>
       <div style="margin-top:8px;font-size:12px">Se abrirá el diálogo de impresión del navegador. El ancho depende de la impresora configurada.</div>
-      <div id="ticket_{key}" style="display:none;width:58mm;white-space:pre-wrap;font-size:10pt">{seguro}{('<br><center>'+qr_img+'</center><center>QR ÚNICO DEL VEHÍCULO</center>' if parte == 'cliente' else '')}</div>
+      <div id="ticket_{key}" style="display:none;width:58mm;white-space:pre-wrap;font-size:10pt">{seguro}</div>
     </div>
     <script>
       document.getElementById("{key}").addEventListener("click", function() {{
@@ -338,6 +346,47 @@ def vista_impresion_con_qr(registro, parte="cliente", key="print_qr"):
     </script>
     """
     st.components.v1.html(html_doc, height=95)
+
+
+def vista_comprobante_cobro(pago, registro, key="imprimir_comprobante_cobro"):
+    """Muestra un comprobante imprimible del cobro ya registrado."""
+    datos = {
+        "Sucursal": registro.get("sucursal", ""),
+        "Folio": registro.get("id", ""),
+        "Vehículo": f"{registro.get('marca', '')} · {registro.get('placas', '')}",
+        "Fecha y hora": pago.get("fecha_hora", ""),
+        "Importe": f"${dinero(pago.get('importe')):,.2f} MXN",
+        "Método": pago.get("metodo", ""),
+        "Estado": pago.get("estado", ""),
+        "Referencia": pago.get("referencia", "") or "No aplica",
+        "Atendió": pago.get("usuario", ""),
+    }
+    filas = "".join(
+        f"<tr><td>{html.escape(str(etiqueta))}</td><td>{html.escape(str(valor))}</td></tr>"
+        for etiqueta, valor in datos.items()
+    )
+    html_doc = f"""
+    <div style="font-family:Arial,sans-serif;color:#111;max-width:440px">
+      <button id="{key}" style="padding:10px 14px;font-weight:bold;border:0;border-radius:6px;background:#174a7e;color:white">🧾 Imprimir comprobante de cobro</button>
+      <div id="contenido_{key}" style="display:none">
+        <div style="width:72mm;padding:3mm;font-family:Arial,sans-serif;color:#111">
+          <center><b>CLUB PARK</b><br>VALET Y ESTACIONAMIENTOS S.A. DE C.V.<br><b>COMPROBANTE DE COBRO</b></center>
+          <hr><table style="width:100%;font-size:10pt;border-collapse:collapse">{filas}</table>
+          <hr><center>Conserve este comprobante.<br>Gracias por su preferencia.</center>
+        </div>
+      </div>
+      <script>
+      document.getElementById("{key}").addEventListener("click", function() {{
+        const contenido = document.getElementById("contenido_{key}").innerHTML;
+        const w = window.open("", "_blank", "width=420,height=650");
+        if (!w) {{ alert("Permite ventanas emergentes para imprimir el comprobante."); return; }}
+        w.document.write('<html><head><title>Comprobante CLUB PARK</title><style>@page{{size:80mm auto;margin:3mm}}body{{font-family:Arial,sans-serif}}table td{{padding:4px 0;vertical-align:top}}table td:first-child{{font-weight:bold;width:38%}}</style></head><body>' + contenido + '</body></html>');
+        w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+      }});
+      </script>
+    </div>
+    """
+    st.components.v1.html(html_doc, height=70)
 
 
 def imprimir_partes_ticket(registro, sufijo):
@@ -942,7 +991,7 @@ with tab_salida:
             tarifa_salida = dinero(registro_salida.get("tarifa", PRECIOS_SUCURSALES.get(registro_salida.get("sucursal"), 0)))
             st.metric("Tarifa fija a cobrar", f"${tarifa_salida:,.2f} MXN")
             st.caption("La tarifa se toma del registro de ingreso. Verifica cualquier cambio autorizado antes de cobrar.")
-            forma_pago = st.radio("Método de pago", ["Efectivo", "QR", "Tarjeta"], horizontal=True, key=f"pago_metodo_{registro_salida['id']}")
+            forma_pago = st.radio("Método de pago", ["Efectivo", "QR"], horizontal=True, key=f"pago_metodo_{registro_salida['id']}")
             referencia_pago = st.text_input("Referencia / autorización (si aplica)", key=f"pago_ref_{registro_salida['id']}")
             nota_pago = st.text_input("Observaciones del cobro", key=f"pago_nota_{registro_salida['id']}")
             if forma_pago == "Efectivo":
@@ -990,10 +1039,47 @@ with tab_salida:
                     registro_salida["entregado_por"] = st.session_state.usuario_autenticado
                     registro_salida["estado"] = "Entregado"
                     if guardar_bd(st.session_state.vehiculos):
+                        st.session_state.ultimo_comprobante_cobro = {
+                            "pago": pago.copy(),
+                            "registro": {
+                                "id": registro_salida.get("id", ""),
+                                "sucursal": registro_salida.get("sucursal", ""),
+                                "marca": registro_salida.get("marca", ""),
+                                "placas": registro_salida.get("placas", ""),
+                            },
+                        }
                         guardar_evento_auditoria("SALIDA Y COBRO", f"Folio {registro_salida.get('id')} · ${tarifa_salida:.2f} · {forma_pago} · {registro_salida.get('sucursal')}")
                         st.success(f"Salida registrada. Folio {registro_salida.get('id')}; cobro de ${tarifa_salida:,.2f} MXN por {forma_pago}.")
                         st.rerun()
 
+
+    comprobante_reciente = st.session_state.get("ultimo_comprobante_cobro")
+    if comprobante_reciente:
+        st.divider()
+        st.subheader("🧾 Último comprobante de cobro")
+        st.caption("El comprobante se genera después de registrar el cobro y la salida. Si el pago fue externo, la referencia es la que capturó el operador.")
+        vista_comprobante_cobro(
+            comprobante_reciente.get("pago", {}),
+            comprobante_reciente.get("registro", {}),
+            "imprimir_comprobante_cobro_reciente",
+        )
+        st.download_button(
+            "⬇️ Descargar comprobante en texto",
+            data="CLUB PARK\nCOMPROBANTE DE COBRO\n" + "\n".join(
+                f"{k}: {v}" for k, v in {
+                    "Sucursal": comprobante_reciente.get("registro", {}).get("sucursal", ""),
+                    "Folio": comprobante_reciente.get("registro", {}).get("id", ""),
+                    "Fecha y hora": comprobante_reciente.get("pago", {}).get("fecha_hora", ""),
+                    "Importe": f"${dinero(comprobante_reciente.get('pago', {}).get('importe')):,.2f} MXN",
+                    "Método": comprobante_reciente.get("pago", {}).get("metodo", ""),
+                    "Estado": comprobante_reciente.get("pago", {}).get("estado", ""),
+                    "Referencia": comprobante_reciente.get("pago", {}).get("referencia", "") or "No aplica",
+                }.items()
+            ),
+            file_name=f"Comprobante_{comprobante_reciente.get('registro', {}).get('id', 'CLUBPARK')}.txt",
+            mime="text/plain",
+            key="descargar_comprobante_cobro_reciente",
+        )
 
 
 # ---------------------------------------------------------------------
@@ -1140,6 +1226,7 @@ with tab_balance:
             vehiculos_salieron = int(df_balance["Vehículos que salieron"].sum()) if not df_balance.empty else 0
             vehiculos_cobrados = int(df_balance["Vehículos cobrados"].sum()) if not df_balance.empty else 0
             margen_total = total_utilidad / total_ingresos * 100 if total_ingresos else 0
+
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("Vehículos ingresados", vehiculos_ingresados)
             k2.metric("Vehículos que salieron", vehiculos_salieron)
