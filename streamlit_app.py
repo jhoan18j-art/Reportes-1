@@ -63,12 +63,8 @@ DATA_DIR = Path(os.environ.get("CLUBPARK_DATA_DIR", str(BASE_DIR)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PHOTO_DIR = DATA_DIR / "fotos_vehiculos"
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)
-COMPONENT_DIR = BASE_DIR / "clubpark_component"
-if not (COMPONENT_DIR / "index.html").is_file():
-    st.error("Falta clubpark_component/index.html junto a streamlit_app.py. Sube la carpeta completa al repositorio y reinicia la app.")
-    st.stop()
 CAMARA_COMPONENT = st.components.v1.declare_component(
-    "clubpark_camara_trasera", path=str(COMPONENT_DIR.resolve())
+    "clubpark_camara_trasera", path=str(BASE_DIR / "clubpark_component")
 )
 DB_FILE = DATA_DIR / "vehiculos_produccion_db.json"
 CONFIG_FILE = DATA_DIR / "config_operativa.json"
@@ -83,7 +79,10 @@ PRECIOS_SUCURSALES = {
     "CARAJILLO POLANCO": 100,
     "BENINGAN´S": 40,
     "SANATORIO DURANGO": 100,
-    "BARRANCA": 0,
+    "BARRANCA": 25,
+    "CLÍNICA ASURA": 100,
+    "ASURA": 100,
+    "S. AZURA": 100,
     "VETERINARIA": 0,
     "ROMANCE PALACE": 65,
     "JUNGLA TLALPAN": 100,
@@ -466,15 +465,102 @@ def vista_comprobante_cobro(pago, registro, key="imprimir_comprobante_cobro"):
 
 
 def imprimir_partes_ticket(registro, sufijo):
-    """Muestra respaldo de texto sin llamar a una función Bluetooth inexistente.
-    La impresión física, incluido el QR gráfico, se realiza con vista_impresion_con_qr.
-    """
     primera, segunda = crear_partes_ticket(registro)
-    with st.expander("Ver respaldo de texto del ticket", expanded=False):
-        st.markdown("**Boleto del cliente**")
-        st.code(primera, language="text")
-        st.markdown("**Llavero y contraseña**")
-        st.code(segunda, language="text")
+    st.markdown("**Impresión 1: boleto del cliente**")
+    st.code(primera, language="text")
+    imprimir_bluetooth(primera, f"{sufijo}_cliente", qr_payload=qr_payload(registro))
+    st.markdown("**Impresión 2: llavero y contraseña de parabrisas**")
+    st.code(segunda, language="text")
+    imprimir_bluetooth(segunda, f"{sufijo}_contrasena")
+
+
+def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
+    """Impresión ESC/POS por Web Bluetooth para impresoras BLE compatibles.
+
+    Nota: Chrome/Streamlit no puede abrir el perfil Bluetooth clásico SPP/RFCOMM.
+    Para impresoras clásicas se necesita una app Android nativa/puente local.
+    """
+    texto_json = json.dumps(str(texto), ensure_ascii=False)
+    qr_json = json.dumps(str(qr_payload or ""), ensure_ascii=False)
+    # Sanitizar la clave para que sea válida en HTML/JS.
+    safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", str(key_suffix))
+    html_doc = f"""
+    <div style="font-family:Arial,sans-serif;border:1px solid #ddd;border-radius:10px;padding:12px">
+      <button id="bt_{safe_key}" style="background:#174a7e;color:white;padding:12px;border:0;border-radius:8px;font-weight:bold;width:100%">
+        🖨️ Conectar e imprimir por Bluetooth
+      </button>
+      <div id="bt_status_{safe_key}" style="font-size:13px;margin-top:8px">Compatible con impresoras térmicas Bluetooth BLE que expongan una característica de escritura ESC/POS.</div>
+    </div>
+    <script>
+    (() => {{
+      const ticket = {texto_json};
+      const qr = {qr_json};
+      const btn = document.getElementById('bt_{safe_key}');
+      const status = document.getElementById('bt_status_{safe_key}');
+      const say = t => status.textContent = t;
+      const enc = new TextEncoder();
+      const concat = (...parts) => {{ let n=parts.reduce((a,p)=>a+p.length,0), o=new Uint8Array(n), k=0; for(const p of parts){{o.set(p,k);k+=p.length;}} return o; }};
+      const cmd = (...a) => new Uint8Array(a);
+      function qrCommands(data) {{
+        if (!data) return new Uint8Array();
+        const b=enc.encode(data), len=b.length+3, pL=len&255, pH=(len>>8)&255;
+        return concat(
+          cmd(0x1B,0x61,0x01),             // centrar
+          cmd(0x1D,0x28,0x6B,0x04,0x00,0x31,0x41,0x32,0x00), // QR model 2
+          cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x43,0x06), // tamaño módulo
+          cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x45,0x31), // corrección M
+          cmd(0x1D,0x28,0x6B,pL,pH,0x31,0x50,0x30), b,
+          cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x51,0x30), // imprimir QR
+          enc.encode('\n\n'), cmd(0x1B,0x61,0x00)
+        );
+      }}
+      async function sendChunks(ch, data) {{
+        const max = 180;
+        for(let i=0;i<data.length;i+=max) {{
+          const chunk=data.slice(i,Math.min(i+max,data.length));
+          if(ch.writeValueWithoutResponse) await ch.writeValueWithoutResponse(chunk);
+          else if(ch.writeValueWithResponse) await ch.writeValueWithResponse(chunk);
+          else await ch.writeValue(chunk);
+          await new Promise(r=>setTimeout(r,12));
+        }}
+      }}
+      btn.addEventListener('click', async () => {{
+        if (!navigator.bluetooth) {{ say('Chrome no ofrece Web Bluetooth en este entorno. Si tu impresora es Bluetooth clásico, se necesita una app Android nativa.'); return; }}
+        btn.disabled=true;
+        try {{
+          say('Selecciona la impresora térmica en el cuadro de Bluetooth…');
+          const device=await navigator.bluetooth.requestDevice({{
+            acceptAllDevices:true,
+            optionalServices:['0000ffe0-0000-1000-8000-00805f9b34fb','0000ff00-0000-1000-8000-00805f9b34fb','0000ae00-0000-1000-8000-00805f9b34fb','6e400001-b5a3-f393-e0a9-e50e24dcca9e','000018f0-0000-1000-8000-00805f9b34fb']
+          }});
+          say('Conectando con '+(device.name||'impresora')+'…');
+          const server=await device.gatt.connect();
+          let characteristic=null;
+          const services=await server.getPrimaryServices();
+          for(const service of services) {{
+            const chars=await service.getCharacteristics();
+            characteristic=chars.find(c=>c.properties.writeWithoutResponse||c.properties.write||c.properties.writeWithResponse);
+            if(characteristic) break;
+          }}
+          if(!characteristic) throw new Error('No se encontró una característica Bluetooth de escritura. Esta impresora puede ser Bluetooth clásico SPP, no BLE compatible con navegador.');
+          const init=cmd(0x1B,0x40); // ESC @
+          const body=enc.encode(ticket+'\n');
+          const feed=cmd(0x0A,0x0A,0x0A);
+          say(qr?'Enviando boleto y QR a la impresora…':'Enviando texto a la impresora…');
+          await sendChunks(characteristic,init);
+          await sendChunks(characteristic,body);
+          if(qr) await sendChunks(characteristic,qrCommands(qr));
+          await sendChunks(characteristic,feed);
+          say('Datos enviados. Si no imprimió, revisa papel, batería y compatibilidad BLE/ESC-POS.');
+          try {{ device.gatt.disconnect(); }} catch(e) {{}}
+        }} catch(e) {{
+          say('No se pudo imprimir: '+(e.message||e)+'. Si la impresora se empareja desde Ajustes Android y no aparece en el selector web, probablemente usa Bluetooth clásico SPP.');
+        }} finally {{ btn.disabled=false; }}
+      }});
+    }})();
+    </script>
+    """
+    st.components.v1.html(html_doc, height=125)
 
 
 def dinero(valor):
@@ -482,6 +568,58 @@ def dinero(valor):
         return float(valor or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def parsear_fecha_entrada(registro):
+    """Obtiene la fecha de entrada en formatos ISO o dd/mm/aaaa."""
+    candidatos = [registro.get("fecha_entrada_iso"), registro.get("fecha_entrada"), registro.get("fecha")]
+    for valor in candidatos:
+        if not valor:
+            continue
+        try:
+            return datetime.fromisoformat(str(valor).replace("Z", "+00:00")).replace(tzinfo=None)
+        except (ValueError, TypeError):
+            pass
+        for formato in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                return datetime.strptime(str(valor), formato)
+            except (ValueError, TypeError):
+                continue
+    return None
+
+
+def calcular_tarifa_estacionamiento(registro, momento_salida=None):
+    """Calcula la tarifa total de acuerdo con las reglas especiales de sucursal.
+
+    Barranca: tarifa normal de $25 primera hora y $7 por cada fracción iniciada de 15 min.
+    Barranca promoción: $80 si se seleccionó y la estancia completa queda entre 08:00 y 20:00.
+    Clínica Asura/Azura: $100 por cada bloque iniciado de hasta 10 horas.
+    Otras sucursales conservan su tarifa fija configurada.
+    """
+    sucursal = str(registro.get("sucursal", "")).strip().upper()
+    entrada = parsear_fecha_entrada(registro)
+    salida = momento_salida or datetime.now()
+    if entrada is None:
+        return dinero(registro.get("tarifa", PRECIOS_SUCURSALES.get(sucursal, 0)))
+    minutos = max(0, int((salida - entrada).total_seconds() // 60))
+    if "BARRANCA" in sucursal:
+        modalidad = str(registro.get("modalidad_tarifa", "normal")).strip().lower()
+        # La promoción solo aplica si entrada y salida ocurren el mismo día,
+        # con entrada a partir de las 08:00 y salida a más tardar a las 20:00.
+        if modalidad in ("promoción", "promocion", "promocional"):
+            inicio_promocion = entrada.replace(hour=8, minute=0, second=0, microsecond=0)
+            fin_promocion = entrada.replace(hour=20, minute=0, second=0, microsecond=0)
+            if inicio_promocion <= entrada <= fin_promocion and entrada.date() == salida.date() and salida <= fin_promocion:
+                return 80.0
+            # Si no cumple la ventana promocional, aplica la tarifa normal.
+        if minutos <= 60:
+            return 25.0
+        fracciones = (minutos - 60 + 14) // 15
+        return 25.0 + fracciones * 7.0
+    if "ASURA" in sucursal or "AZURA" in sucursal:
+        bloques = max(1, (minutos + 600 - 1) // 600)
+        return float(bloques * 100)
+    return dinero(registro.get("tarifa", PRECIOS_SUCURSALES.get(sucursal, 0)))
 
 
 def normalizar_texto(valor):
@@ -779,7 +917,7 @@ with st.sidebar:
         st.rerun()
 
 tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud = st.tabs([
-    "📥 Ingreso y 4/6 Fotografías",
+    "📥 Ingreso y 4 Fotografías",
     "📋 Vehículos Registrados",
     "🚘 Salida y Cobro",
     "📈 Balances y Rentabilidad",
@@ -809,7 +947,20 @@ with tab_ing:
         placas = st.text_input("Placas / folio de placa", key="ing_placas").strip().upper()
         tarifa_default = float(PRECIOS_SUCURSALES.get(sucursal, 50))
         tarifa = tarifa_default
-        st.metric("Tarifa fija de la sucursal", f"${tarifa:,.2f} MXN")
+        modalidad_tarifa = "normal"
+        if sucursal and "BARRANCA" in sucursal.upper():
+            modalidad_tarifa = st.radio(
+                "Tarifa Barranca del Muerto",
+                options=["normal", "promoción"],
+                format_func=lambda opcion: "Normal: $25 primera hora + $7 cada 15 min" if opcion == "normal" else "Promoción: $80 de 08:00 a 20:00",
+                horizontal=False,
+                key="modalidad_tarifa_barranca",
+            )
+            st.info("La promoción de $80 aplica únicamente si la entrada es desde las 08:00 y la salida ocurre el mismo día a más tardar a las 20:00. Si no cumple esa ventana, se calcula la tarifa normal.")
+        elif sucursal and ("ASURA" in sucursal.upper() or "AZURA" in sucursal.upper()):
+            st.info("Tarifa Clínica Asura: $100 por cada bloque iniciado de hasta 10 horas.")
+        else:
+            st.metric("Tarifa fija de la sucursal", f"${tarifa:,.2f} MXN")
         operador = st.text_input("Valet / operador", value=st.session_state.usuario_autenticado)
     st.subheader("Observaciones y custodia")
     sin_valores = st.checkbox("⚡ Sin objetos de valor declarados", key="ing_sin_valores")
@@ -835,23 +986,16 @@ with tab_ing:
     if fotos_pertenencias_archivos:
         st.caption(f"Fotos adicionales seleccionadas: {len(fotos_pertenencias_archivos)}")
 
-    st.subheader("2. Fotografías de evidencia del vehículo")
-    cantidad_fotos = st.radio(
-        "Cantidad de fotografías obligatorias",
-        [4, 6], horizontal=True, format_func=lambda n: f"{n} fotografías",
-        key="cantidad_fotos_evidencia",
-        help="Elige cuatro vistas básicas o seis vistas para una evidencia más completa."
-    )
-    st.caption("Las primeras cuatro vistas son obligatorias. Si eliges seis, también debes adjuntar frente diagonal y parte trasera diagonal.")
+    st.subheader("2. Fotografías obligatorias del vehículo")
+    cantidad_fotos = st.radio("Cantidad de fotos de evidencia", [4, 6], horizontal=True, key="cantidad_fotos_evidencia", format_func=lambda n: f"{n} fotografías")
+    st.caption("Elige cuatro vistas básicas o seis vistas con dos ángulos diagonales adicionales.")
     a, b = st.columns(2)
     with a:
         foto_frente = st.file_uploader("1. Vista frontal", type=["jpg", "jpeg", "png"], key="foto_frente")
         foto_izq = st.file_uploader("2. Costado izquierdo", type=["jpg", "jpeg", "png"], key="foto_izq")
-        foto_frente_diag = st.file_uploader("5. Frente diagonal (solo modo 6 fotos)", type=["jpg", "jpeg", "png"], key="foto_frente_diag", disabled=cantidad_fotos != 6) if cantidad_fotos == 6 else None
     with b:
         foto_der = st.file_uploader("3. Costado derecho", type=["jpg", "jpeg", "png"], key="foto_der")
         foto_tras = st.file_uploader("4. Vista trasera", type=["jpg", "jpeg", "png"], key="foto_tras")
-        foto_tras_diag = st.file_uploader("6. Parte trasera diagonal (solo modo 6 fotos)", type=["jpg", "jpeg", "png"], key="foto_tras_diag", disabled=cantidad_fotos != 6) if cantidad_fotos == 6 else None
 
     if st.button("💾 Registrar ingreso y generar ticket", type="primary", use_container_width=True):
         faltantes = []
@@ -873,10 +1017,10 @@ with tab_ing:
             faltantes.append("foto derecha")
         if not foto_tras:
             faltantes.append("foto trasera")
-        if cantidad_fotos == 6 and not foto_frente_diag:
-            faltantes.append("foto frente diagonal")
-        if cantidad_fotos == 6 and not foto_tras_diag:
-            faltantes.append("foto trasera diagonal")
+        if cantidad_fotos == 6 and not foto_diagonal_frente:
+            faltantes.append("foto diagonal frontal")
+        if cantidad_fotos == 6 and not foto_diagonal_trasera:
+            faltantes.append("foto diagonal trasera")
 
         if faltantes:
             st.error("Completa los siguientes campos: " + ", ".join(faltantes) + ".")
@@ -894,8 +1038,8 @@ with tab_ing:
             ]
             if cantidad_fotos == 6:
                 archivos.extend([
-                    ("frente_diagonal", foto_frente_diag),
-                    ("trasera_diagonal", foto_tras_diag),
+                    ("diagonal_frente", foto_diagonal_frente),
+                    ("diagonal_trasera", foto_diagonal_trasera),
                 ])
             try:
                 for vista, archivo in archivos:
@@ -909,6 +1053,7 @@ with tab_ing:
                     "id": folio,
                     "folio_numero": folio_numero,
                     "qr_payload": f"CLUBPARK|VEHICULO|{folio}",
+                    "cantidad_fotos_evidencia": cantidad_fotos,
                     "fecha": fecha,
                     "fecha_entrada": fecha,
                     "fecha_entrada_iso": fecha_entrada_iso,
@@ -921,6 +1066,7 @@ with tab_ing:
                     "color": color.strip(),
                     "placas": placas,
                     "tarifa": float(tarifa),
+                    "modalidad_tarifa": modalidad_tarifa if "BARRANCA" in str(sucursal).upper() else "normal",
                     "operador": operador.strip(),
                     "custodia": custodia.strip() or "Sin objetos declarados",
                     "fotos": rutas,
@@ -1102,9 +1248,15 @@ with tab_salida:
         elif registro_salida.get("estado") != "En Resguardo":
             st.warning("El vehículo no está en estado 'En Resguardo'. Revisa el registro antes de continuar.")
         else:
-            tarifa_salida = dinero(registro_salida.get("tarifa", PRECIOS_SUCURSALES.get(registro_salida.get("sucursal"), 0)))
-            st.metric("Tarifa fija a cobrar", f"${tarifa_salida:,.2f} MXN")
-            st.caption("La tarifa se toma del registro de ingreso. Verifica cualquier cambio autorizado antes de cobrar.")
+            tarifa_salida = calcular_tarifa_estacionamiento(registro_salida, datetime.now())
+            entrada_calculo = parsear_fecha_entrada(registro_salida)
+            if entrada_calculo:
+                tiempo_estadia = datetime.now() - entrada_calculo
+                horas_estadia = max(0, int(tiempo_estadia.total_seconds() // 3600))
+                minutos_estadia = max(0, int(tiempo_estadia.total_seconds() // 60) % 60)
+                st.caption(f"Tiempo de estancia: {horas_estadia} h {minutos_estadia} min")
+            st.metric("Total calculado a cobrar", f"${tarifa_salida:,.2f} MXN")
+            st.caption("Barranca y Clínica Asura/Azura aplican tarifa por tiempo; las demás sucursales conservan su tarifa fija.")
             forma_pago = st.radio("Método de pago", ["Efectivo", "Tarjeta", "QR"], horizontal=True, key=f"pago_metodo_{registro_salida['id']}")
             referencia_pago = st.text_input("Referencia / autorización (si aplica)", key=f"pago_ref_{registro_salida['id']}")
             nota_pago = st.text_input("Observaciones del cobro", key=f"pago_nota_{registro_salida['id']}")
@@ -1132,6 +1284,8 @@ with tab_salida:
                     st.error("No se registró la salida: confirma primero que el proveedor aprobó el pago.")
                 else:
                     momento_operacion = datetime.now()
+                    # Recalcular en el instante de confirmación para evitar cobrar con una tarifa desactualizada.
+                    tarifa_salida = calcular_tarifa_estacionamiento(registro_salida, momento_operacion)
                     ahora = momento_operacion.strftime("%Y-%m-%d %H:%M:%S")
                     pago = {
                         "id_pago": str(uuid.uuid4()),
@@ -1205,9 +1359,8 @@ with tab_salida:
             "Conserve este comprobante.",
             "Gracias por su preferencia.",
         ])
-        st.markdown("**Comprobante para impresión**")
-        st.code(texto_comprobante, language="text")
-        st.caption("Para imprimirlo, usa la opción de impresión del navegador. La impresión Bluetooth directa no está habilitada en esta versión.")
+        st.markdown("**Impresión térmica Bluetooth del comprobante**")
+        imprimir_bluetooth(texto_comprobante, f"comprobante_{registro_reciente.get('id', 'reciente')}")
         st.download_button(
             "⬇️ Descargar comprobante en texto",
             data="CLUB PARK\nCOMPROBANTE DE COBRO\n" + "\n".join(
@@ -2242,4 +2395,3 @@ if es_contador:
         st.dataframe(pd.DataFrame(eventos), use_container_width=True, hide_index=True)
     else:
         st.info("Los cambios de folios, salidas y cortes aparecerán aquí.")
-  
