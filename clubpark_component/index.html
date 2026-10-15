@@ -1,40 +1,58 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>
-*{box-sizing:border-box}body{margin:0;padding:10px;font-family:Arial,sans-serif;color:#202124}video,canvas{width:100%;max-height:340px;object-fit:cover;border-radius:10px;background:#111}button{border:0;border-radius:8px;padding:11px 14px;background:#174a7e;color:#fff;font-weight:700;margin:8px 6px 0 0}#status{font-size:13px;margin:7px 0;color:#444}#result{font-weight:700;overflow-wrap:anywhere;color:#146c2e}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,Arial;color:#202124;background:transparent}main{padding:8px}video{width:100%;max-height:62vh;object-fit:cover;background:#111;border-radius:12px;display:block}canvas{display:none}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.controls button{border:0;border-radius:9px;padding:11px 14px;background:#174ea6;color:white;font-weight:600;font-size:14px}.controls button.secondary{background:#e8eaed;color:#202124}.status{padding:9px 11px;border-radius:8px;background:#f1f3f4;margin:8px 0;overflow-wrap:anywhere}.status.ok{background:#e6f4ea;color:#137333}.status.err{background:#fce8e6;color:#b3261e}.hidden{display:none!important}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.4.0/dist/streamlit-component-lib.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-</head>
-<body>
-<div id="status">Preparando cámara posterior…</div><video id="video" autoplay playsinline muted></video><canvas id="canvas" hidden></canvas>
-<div><button id="capture" hidden>Tomar fotografía</button><button id="restart" hidden>Volver a escanear</button></div><div id="result"></div>
+</head><body><main>
+<div id="status" class="status">Preparando cámara trasera…</div>
+<video id="video" autoplay playsinline muted></video><canvas id="canvas"></canvas>
+<div class="controls" id="qrControls"><button id="start">Activar cámara trasera</button><button id="stop" class="secondary">Detener cámara</button></div>
+<div class="controls hidden" id="photoControls"><button id="capture">Tomar fotografía</button><button id="retake" class="secondary">Volver a tomar</button></div>
+<div class="controls hidden" id="resultControls"><button id="accept">Usar esta fotografía</button></div>
 <script>
-(() => {
+(function(){
  const video=document.getElementById('video'), canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d',{willReadFrequently:true});
- const status=document.getElementById('status'), capture=document.getElementById('capture'), restart=document.getElementById('restart'), result=document.getElementById('result');
- let mode='qr', stream=null, stopped=false, lastValue='';
- function send(value){parent.postMessage({isStreamlitMessage:true,type:'streamlit:setComponentValue',value},'*');}
- function height(){parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeight',height:Math.min(500,document.body.scrollHeight+5)},'*');}
+ const status=document.getElementById('status'), qrControls=document.getElementById('qrControls'), photoControls=document.getElementById('photoControls'), resultControls=document.getElementById('resultControls');
+ let mode='qr', stream=null, running=false, lastValue='', captured='';
+ function send(value){ if(window.Streamlit) Streamlit.setComponentValue(value); }
+ function say(msg,kind=''){status.textContent=msg;status.className='status '+kind;}
+ function stop(){running=false;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}video.srcObject=null;}
  async function start(){
-   stopped=false; status.textContent='Solicitando cámara posterior…';
-   try{
-    if(stream) stream.getTracks().forEach(t=>t.stop());
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
-    video.srcObject=stream; await video.play(); status.textContent= mode==='photo'?'Cámara posterior lista. Encuadra las pertenencias y toma la foto.':'Apunta al código QR; la lectura será automática.';
-    capture.hidden=mode!=='photo'; restart.hidden=mode!=='qr'; height(); if(mode==='qr') requestAnimationFrame(scan);
-   }catch(e){status.textContent='No se pudo abrir la cámara. Permite el permiso de cámara en Chrome y abre la app mediante HTTPS. Detalle: '+e.message; height();}
+  stop(); lastValue='';
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){say('Este navegador no permite acceder a la cámara. Abre la aplicación en Chrome mediante HTTPS.','err');return;}
+  try{
+   // Preferir cámara posterior explícitamente; fallback por si el navegador no admite la restricción exacta.
+   try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{exact:'environment'},width:{ideal:1280},height:{ideal:720}}});}
+   catch(e){stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});}
+   video.srcObject=stream; await video.play(); running=true;
+   say(mode==='qr'?'Apunta la cámara trasera al QR. La lectura es automática.':'Cámara trasera activa. Encuadra las pertenencias y toma la fotografía.','ok');
+   if(mode==='qr') requestAnimationFrame(scan);
+  }catch(e){say('No se pudo abrir la cámara. Permite el acceso a la cámara para este sitio y vuelve a intentarlo. Detalle: '+(e.message||e),'err');}
  }
  function scan(){
-  if(stopped||mode!=='qr'||video.readyState<2)return requestAnimationFrame(scan);
-  const w=video.videoWidth,h=video.videoHeight;if(w&&h){canvas.width=w;canvas.height=h;ctx.drawImage(video,0,0,w,h);const im=ctx.getImageData(0,0,w,h);if(window.jsQR){const code=jsQR(im.data,w,h,{inversionAttempts:'attemptBoth'});if(code&&code.data&&code.data!==lastValue){lastValue=code.data;stopped=true;result.textContent='QR leído: '+code.data;status.textContent='Lectura terminada.';send(code.data);height();return;}}}
+  if(!running||mode!=='qr')return;
+  if(video.readyState>=2&&video.videoWidth){
+   const w=video.videoWidth,h=video.videoHeight; canvas.width=w;canvas.height=h;ctx.drawImage(video,0,0,w,h);
+   try{const im=ctx.getImageData(0,0,w,h);const code=window.jsQR?jsQR(im.data,w,h,{inversionAttempts:'attemptBoth'}):null;
+    if(code&&code.data&&code.data.trim()){
+     const value=code.data.trim(); if(value!==lastValue){lastValue=value;send(value);say('QR leído correctamente: '+value,'ok');stop();return;}
+    }
+   }catch(e){}
+  }
   requestAnimationFrame(scan);
  }
- capture.addEventListener('click',()=>{if(!video.videoWidth)return;canvas.width=video.videoWidth;canvas.height=video.videoHeight;ctx.drawImage(video,0,0,canvas.width,canvas.height);const data=canvas.toDataURL('image/jpeg',0.88);status.textContent='Fotografía capturada.';send(data);});
- restart.addEventListener('click',()=>{lastValue='';result.textContent='';stopped=false;status.textContent='Buscando QR…';requestAnimationFrame(scan);});
- window.addEventListener('message',e=>{const d=e.data||{};if(d.type==='streamlit:render'){mode=(d.args&&d.args.mode)||'qr';height();if(!stream)start();else{capture.hidden=mode!=='photo';restart.hidden=mode!=='qr';if(mode==='qr'){stopped=false;requestAnimationFrame(scan);}}}});
- parent.postMessage({isStreamlitMessage:true,type:'streamlit:componentReady',apiVersion:1},'*');
+ function setMode(next){mode=next;qrControls.classList.toggle('hidden',mode!=='qr');photoControls.classList.toggle('hidden',mode!=='photo');resultControls.classList.add('hidden');video.classList.remove('hidden');captured='';}
+ document.getElementById('start').onclick=start;
+ document.getElementById('stop').onclick=()=>{stop();say('Cámara detenida. Pulsa “Activar cámara trasera” para continuar.');};
+ document.getElementById('capture').onclick=()=>{if(!running||!video.videoWidth){say('Primero activa la cámara trasera.','err');return;}canvas.width=video.videoWidth;canvas.height=video.videoHeight;ctx.drawImage(video,0,0,canvas.width,canvas.height);captured=canvas.toDataURL('image/jpeg',0.88);video.classList.add('hidden');stop();resultControls.classList.remove('hidden');say('Fotografía capturada. Revisa la imagen antes de guardarla.','ok');const old=document.getElementById('preview');if(old)old.remove();const img=document.createElement('img');img.id='preview';img.src=captured;img.style.cssText='width:100%;border-radius:12px;margin-top:8px';canvas.insertAdjacentElement('afterend',img);};
+ document.getElementById('retake').onclick=()=>{const old=document.getElementById('preview');if(old)old.remove();video.classList.remove('hidden');start();};
+ document.getElementById('accept').onclick=()=>{if(captured){send(captured);say('Fotografía lista para guardar.','ok');resultControls.classList.add('hidden');}};
+ function onRender(event){const args=event.detail.args||{};setMode(args.mode==='photo'?'photo':'qr');const h=Number(args.height||390);video.style.maxHeight=Math.max(240,Math.min(h,650))+'px';if(mode==='photo'){say('Pulsa “Activar cámara trasera” para capturar evidencia.');document.getElementById('start').textContent='Activar cámara trasera';}else{say('Pulsa “Activar cámara trasera” y apunta al código QR.');}}
+ window.addEventListener('message',e=>{if(e.data&&e.data.type==='streamlit:render')onRender(e);});
+ if(window.Streamlit){Streamlit.events.addEventListener(Streamlit.RENDER_EVENT,onRender);Streamlit.setComponentReady();Streamlit.setFrameHeight(500);}
 })();
-</script>
-</body></html>
+</script></main></body></html>
