@@ -58,14 +58,137 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ---------------------------------------------------------------------
+# ESTILO CONSTITUCIONAL E INSTITUCIONAL - VERDE BOTELLA (#0B3B24)
+# CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.
+# ---------------------------------------------------------------------
+CSS_INSTITUCIONAL = """
+<style>
+/* Paleta Institucional Club Park: Verde Botella Oficial */
+:root {
+  --cpv-verde-botella: #0B3B24;
+  --cpv-verde-oscuro: #072617;
+  --cpv-verde-medio: #145A32;
+  --cpv-verde-claro: #EBF3EE;
+  --cpv-dorado-oficial: #C5A059;
+  --cpv-dorado-brillante: #D4AF37;
+  --cpv-fondo-suave: #F4F7F5;
+  --cpv-texto-principal: #1A2B20;
+}
+
+/* Encabezados y títulos */
+h1, h2, h3 {
+  color: #0B3B24 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 700;
+}
+
+/* Botones Primarios */
+button[kind="primary"], .stButton > button[kind="primary"], div[data-testid="stFormSubmitButton"] > button {
+  background-color: #0B3B24 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #072617 !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 5px rgba(11, 59, 36, 0.25) !important;
+  transition: all 0.2s ease !important;
+}
+button[kind="primary"]:hover, .stButton > button[kind="primary"]:hover {
+  background-color: #145A32 !important;
+  border-color: #0B3B24 !important;
+  color: #FFFFFF !important;
+}
+
+/* Botones Secundarios */
+button[kind="secondary"], .stButton > button[kind="secondary"] {
+  background-color: #FFFFFF !important;
+  color: #0B3B24 !important;
+  border: 1px solid #C4D7CC !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+}
+button[kind="secondary"]:hover, .stButton > button[kind="secondary"]:hover {
+  background-color: #EBF3EE !important;
+  border-color: #0B3B24 !important;
+  color: #0B3B24 !important;
+}
+
+/* Pestañas (Tabs) en Verde Botella */
+button[data-baseweb="tab"] {
+  color: #1A2B20 !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+  color: #0B3B24 !important;
+  border-bottom-color: #0B3B24 !important;
+  font-weight: 700 !important;
+}
+
+/* Alertas y métricas */
+div[data-testid="stMetricValue"] {
+  color: #0B3B24 !important;
+}
+div[data-testid="stAlert"] {
+  border-radius: 8px !important;
+}
+
+/* Banners institucionales */
+.clubpark-header-card {
+  background: linear-gradient(135deg, #072617 0%, #0B3B24 65%, #145A32 100%);
+  border: 2px solid #C5A059;
+  border-radius: 12px;
+  padding: 20px 24px;
+  color: #FFFFFF;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 14px rgba(11, 59, 36, 0.25);
+}
+.clubpark-gold-badge {
+  background: rgba(197, 160, 89, 0.18);
+  border: 1px solid #C5A059;
+  color: #F7E7CE;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-block;
+  letter-spacing: 0.5px;
+}
+</style>
+"""
+st.markdown(CSS_INSTITUCIONAL, unsafe_allow_html=True)
+
+
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("CLUBPARK_DATA_DIR", str(BASE_DIR)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PHOTO_DIR = DATA_DIR / "fotos_vehiculos"
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)
-CAMARA_COMPONENT = st.components.v1.declare_component(
-    "clubpark_camara_trasera", path=str(BASE_DIR / "clubpark_component")
-)
+def obtener_dir_componente():
+    candidatos = [
+        BASE_DIR / "clubpark_component",
+        BASE_DIR,
+        DATA_DIR / "clubpark_component",
+        DATA_DIR,
+    ]
+    for c in candidatos:
+        if (c / "index.html").exists():
+            return c
+    # Si no existe, crear la carpeta clubpark_component
+    destino = BASE_DIR / "clubpark_component"
+    destino.mkdir(parents=True, exist_ok=True)
+    if (BASE_DIR / "index.html").exists():
+        import shutil
+        shutil.copy(BASE_DIR / "index.html", destino / "index.html")
+    return destino
+
+DIR_COMPONENTE = obtener_dir_componente()
+try:
+    CAMARA_COMPONENT = st.components.v1.declare_component(
+        "clubpark_camara_trasera", path=str(DIR_COMPONENTE)
+    )
+except Exception:
+    CAMARA_COMPONENT = None
 DB_FILE = DATA_DIR / "vehiculos_produccion_db.json"
 CONFIG_FILE = DATA_DIR / "config_operativa.json"
 AUDIT_FILE = DATA_DIR / "auditoria_operativa.json"
@@ -381,47 +504,100 @@ def crear_partes_ticket(registro):
 
 
 def vista_impresion_con_qr(registro, parte="cliente", key="print_qr"):
-    """Vista imprimible del boleto con QR gráfico; usa el diálogo de impresión del navegador."""
+    """Vista imprimible del boleto con QR y soporte térmico directo (sin bloqueador de ventanas)."""
     primera, segunda = crear_partes_ticket(registro)
     texto = primera if parte == "cliente" else segunda
     qr_data = generar_qr_bytes(registro) if QR_OK else None
+    qr_b64 = base64.b64encode(qr_data).decode("ascii") if qr_data else ""
     qr_img = (
-        f'<img alt="QR del vehículo" style="width:128px;height:128px;image-rendering:pixelated" src="data:image/png;base64,{base64.b64encode(qr_data).decode("ascii")}">'
+        f'<img alt="QR del vehículo" style="width:130px;height:130px;margin:8px auto;display:block;image-rendering:pixelated" src="data:image/png;base64,{qr_b64}">'
         if qr_data and parte == "cliente" else ""
     )
     seguro = html.escape(texto)
     if parte == "cliente" and qr_img:
-        # El QR queda en la parte inferior del boleto del cliente, antes de la línea de corte.
         marca_corte = "[ CORTE ]"
         if marca_corte in seguro:
             antes, despues = seguro.split(marca_corte, 1)
             seguro = antes + '<br><center>' + qr_img + '</center><center><b>ESCANEE PARA REGISTRAR LA SALIDA</b></center><br>' + marca_corte + despues
         else:
             seguro += '<br><center>' + qr_img + '</center><center><b>ESCANEE PARA REGISTRAR LA SALIDA</b></center>'
+
+    # Base64 para RawBT (impresión Bluetooth instantánea en Android)
+    texto_rawbt_b64 = base64.b64encode(texto.encode("utf-8")).decode("ascii")
+    rawbt_url = f"rawbt:data:text/plain;base64,{texto_rawbt_b64}"
+    safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", str(key))
+    titulo_btn = 'Boleto del cliente + QR de salida' if parte == 'cliente' else 'Llavero y contraseña parabrisas'
+
     html_doc = f"""
-    <div style="font-family:monospace;color:#111">
-      <button id="{key}" style="padding:10px 14px;font-weight:bold;border:0;border-radius:6px;background:#174a7e;color:white">
-        🖨️ Imprimir {('boleto del cliente + QR de salida' if parte == 'cliente' else 'llavero y contraseña')}
-      </button>
-      <div style="margin-top:8px;font-size:12px">Para que salga el QR gráfico, usa esta impresión del navegador y selecciona la impresora térmica. La impresión Bluetooth de texto no imprime imágenes QR.</div>
-      <div id="ticket_{key}" style="display:none;width:58mm;white-space:pre-wrap;font-size:10pt">{seguro}</div>
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1A2B20;margin:6px 0">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <!-- Botón 1: Impresión directa térmica (sin ventanas emergentes bloqueadas) -->
+        <button id="btn_print_{safe_key}" type="button" style="padding:10px 16px;font-weight:700;border:1px solid #072617;border-radius:8px;background:#0B3B24;color:#FFFFFF;cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+          🖨️ Imprimir {titulo_btn}
+        </button>
+        <!-- Botón 2: Enlace directo RawBT para impresoras Bluetooth Android -->
+        <a href="{rawbt_url}" target="_top" style="text-decoration:none;padding:10px 14px;font-weight:700;border:1px solid #C5A059;border-radius:8px;background:#FAF8F5;color:#0B3B24;display:inline-flex;align-items:center;gap:6px;font-size:13px">
+          📱 Enviar a Mini Impresora Bluetooth (Android)
+        </a>
+      </div>
+      <div id="status_{safe_key}" style="margin-top:6px;font-size:12px;color:#4A6B56">
+        Compatible con impresoras térmicas de 58mm y 80mm. La impresión directa del navegador no requiere instalar aplicaciones adicionales.
+      </div>
+      <div id="ticket_html_{safe_key}" style="display:none">{seguro}</div>
     </div>
     <script>
-      document.getElementById("{key}").addEventListener("click", function() {{
-        const body = document.getElementById("ticket_{key}").innerHTML;
-        const w = window.open("", "_blank", "width=420,height=650");
-        if (!w) {{ alert("El navegador bloqueó la ventana. Permite ventanas emergentes para imprimir."); return; }}
-        w.document.write('<html><head><title>Ticket CLUB PARK</title><style>@page{{size:58mm auto;margin:2mm}}body{{font-family:monospace;font-size:10pt;white-space:pre-wrap;width:54mm}}img{{display:block;margin:4px auto}}</style></head><body>' + body + '</body></html>');
-        w.document.close(); w.focus();
-        setTimeout(() => {{ w.focus(); w.print(); }}, 700);
-      }});
+      (function() {{
+        const btn = document.getElementById("btn_print_{safe_key}");
+        const status = document.getElementById("status_{safe_key}");
+        btn.addEventListener("click", function() {{
+          try {{
+            const contenido = document.getElementById("ticket_html_{safe_key}").innerHTML;
+            let iframe = document.getElementById("iframe_print_{safe_key}");
+            if (!iframe) {{
+              iframe = document.createElement("iframe");
+              iframe.id = "iframe_print_{safe_key}";
+              iframe.style.position = "fixed";
+              iframe.style.right = "0";
+              iframe.style.bottom = "0";
+              iframe.style.width = "0";
+              iframe.style.height = "0";
+              iframe.style.border = "0";
+              document.body.appendChild(iframe);
+            }}
+            const doc = iframe.contentWindow.document;
+            doc.open();
+            doc.write('<!DOCTYPE html><html><head><title>Ticket Club Park</title><style>@page{{size:58mm auto;margin:1.5mm}}body{{font-family:monospace;font-size:9.5pt;line-height:1.25;white-space:pre-wrap;width:54mm;margin:0;padding:2px;color:#000}}img{{display:block;margin:6px auto;max-width:130px}}center{{text-align:center}}</style></head><body>' + contenido + '</body></html>');
+            doc.close();
+            setTimeout(() => {{
+              try {{
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                status.textContent = "Diálogo de impresión activado correctamente.";
+              }} catch(err) {{
+                // Fallback por si el navegador bloquea print() en iframe
+                const w = window.open("", "_blank", "width=420,height=650");
+                if (w) {{
+                  w.document.write('<!DOCTYPE html><html><head><title>Ticket Club Park</title><style>@page{{size:58mm auto;margin:2mm}}body{{font-family:monospace;font-size:10pt;white-space:pre-wrap;width:54mm}}</style></head><body>' + contenido + '</body></html>');
+                  w.document.close();
+                  w.focus();
+                  setTimeout(() => w.print(), 350);
+                }} else {{
+                  status.textContent = "El navegador bloqueó la impresión. Permite ventanas emergentes para este sitio.";
+                }}
+              }}
+            }}, 400);
+          }} catch(e) {{
+            status.textContent = "Error al preparar impresión: " + (e.message || e);
+          }}
+        }});
+      }})();
     </script>
     """
-    st.components.v1.html(html_doc, height=95)
+    st.components.v1.html(html_doc, height=105)
 
 
 def vista_comprobante_cobro(pago, registro, key="imprimir_comprobante_cobro"):
-    """Muestra un comprobante imprimible del cobro ya registrado."""
+    """Muestra un comprobante imprimible del cobro ya registrado con estilo institucional."""
     datos = {
         "Sucursal": registro.get("sucursal", ""),
         "Folio": registro.get("id", ""),
@@ -434,59 +610,95 @@ def vista_comprobante_cobro(pago, registro, key="imprimir_comprobante_cobro"):
         "Atendió": pago.get("usuario", ""),
     }
     filas = "".join(
-        f"<tr><td>{html.escape(str(etiqueta))}</td><td>{html.escape(str(valor))}</td></tr>"
+        f"<tr><td style='padding:3px 0;font-weight:bold;width:40%'>{html.escape(str(etiqueta))}</td><td style='padding:3px 0'>{html.escape(str(valor))}</td></tr>"
         for etiqueta, valor in datos.items()
     )
+    safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", str(key))
     html_doc = f"""
-    <div style="font-family:Arial,sans-serif;color:#111;max-width:440px">
-      <button id="{key}" style="padding:10px 14px;font-weight:bold;border:0;border-radius:6px;background:#174a7e;color:white">🧾 Imprimir comprobante de cobro</button>
-      <div id="contenido_{key}" style="display:none">
-        <div style="width:72mm;padding:3mm;font-family:Arial,sans-serif;color:#111">
-          <center><b>CLUB PARK</b><br>VALET Y ESTACIONAMIENTOS S.A. DE C.V.<br><b>COMPROBANTE DE COBRO</b></center>
-          <hr><table style="width:100%;font-size:10pt;border-collapse:collapse">{filas}</table>
-          <hr><center>Conserve este comprobante.<br>Gracias por su preferencia.</center>
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1A2B20;max-width:440px">
+      <button id="{safe_key}" style="padding:10px 16px;font-weight:700;border:1px solid #072617;border-radius:8px;background:#0B3B24;color:#FFFFFF;cursor:pointer">
+        🧾 Imprimir comprobante de cobro oficial
+      </button>
+      <div id="contenido_{safe_key}" style="display:none">
+        <div style="width:72mm;padding:3mm;font-family:sans-serif;color:#000">
+          <center>
+            <b style="font-size:12pt">CLUB PARK</b><br>
+            <span style="font-size:9pt">VALET Y ESTACIONAMIENTOS S.A. DE C.V.</span><br>
+            <b style="font-size:10pt">COMPROBANTE DE COBRO OFICIAL</b>
+          </center>
+          <hr style="border:0;border-top:1px dashed #000;margin:6px 0">
+          <table style="width:100%;font-size:9.5pt;border-collapse:collapse">{filas}</table>
+          <hr style="border:0;border-top:1px dashed #000;margin:6px 0">
+          <center style="font-size:8.5pt">Conserve este comprobante para cualquier aclaración.<br>Gracias por su preferencia.</center>
         </div>
       </div>
       <script>
-      document.getElementById("{key}").addEventListener("click", function() {{
-        const contenido = document.getElementById("contenido_{key}").innerHTML;
-        const w = window.open("", "_blank", "width=420,height=650");
-        if (!w) {{ alert("Permite ventanas emergentes para imprimir el comprobante."); return; }}
-        w.document.write('<html><head><title>Comprobante CLUB PARK</title><style>@page{{size:80mm auto;margin:3mm}}body{{font-family:Arial,sans-serif}}table td{{padding:4px 0;vertical-align:top}}table td:first-child{{font-weight:bold;width:38%}}</style></head><body>' + contenido + '</body></html>');
-        w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
-      }});
+      (function() {{
+        const btn = document.getElementById("{safe_key}");
+        btn.addEventListener("click", function() {{
+          const contenido = document.getElementById("contenido_{safe_key}").innerHTML;
+          let iframe = document.getElementById("iframe_{safe_key}");
+          if (!iframe) {{
+            iframe = document.createElement("iframe");
+            iframe.id = "iframe_{safe_key}";
+            iframe.style.position = "fixed";
+            iframe.style.right = "0";
+            iframe.style.bottom = "0";
+            iframe.style.width = "0";
+            iframe.style.height = "0";
+            iframe.style.border = "0";
+            document.body.appendChild(iframe);
+          }}
+          const doc = iframe.contentWindow.document;
+          doc.open();
+          doc.write('<!DOCTYPE html><html><head><title>Comprobante Club Park</title><style>@page{{size:80mm auto;margin:3mm}}body{{font-family:sans-serif;margin:0;padding:2px}}</style></head><body>' + contenido + '</body></html>');
+          doc.close();
+          setTimeout(() => {{
+            try {{ iframe.contentWindow.focus(); iframe.contentWindow.print(); }}
+            catch(e) {{ window.print(); }}
+          }}, 350);
+        }});
+      }})();
       </script>
     </div>
     """
-    st.components.v1.html(html_doc, height=70)
+    st.components.v1.html(html_doc, height=75)
 
 
 def imprimir_partes_ticket(registro, sufijo):
     primera, segunda = crear_partes_ticket(registro)
-    st.markdown("**Impresión 1: boleto del cliente**")
+    st.markdown("**Impresión 1: Boleto del cliente**")
     st.code(primera, language="text")
+    vista_impresion_con_qr(registro, parte="cliente", key=f"{sufijo}_cliente_directo")
     imprimir_bluetooth(primera, f"{sufijo}_cliente", qr_payload=qr_payload(registro))
-    st.markdown("**Impresión 2: llavero y contraseña de parabrisas**")
+
+    st.markdown("**Impresión 2: Llavero y contraseña de parabrisas**")
     st.code(segunda, language="text")
+    vista_impresion_con_qr(registro, parte="llavero", key=f"{sufijo}_contrasena_directo")
     imprimir_bluetooth(segunda, f"{sufijo}_contrasena")
 
 
 def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
-    """Impresión ESC/POS por Web Bluetooth para impresoras BLE compatibles.
-
-    Nota: Chrome/Streamlit no puede abrir el perfil Bluetooth clásico SPP/RFCOMM.
-    Para impresoras clásicas se necesita una app Android nativa/puente local.
-    """
+    """Impresión ESC/POS por Web Bluetooth con catálogo amplio de impresoras BLE y opción RawBT."""
     texto_json = json.dumps(str(texto), ensure_ascii=False)
     qr_json = json.dumps(str(qr_payload or ""), ensure_ascii=False)
-    # Sanitizar la clave para que sea válida en HTML/JS.
     safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", str(key_suffix))
+    texto_rawbt_b64 = base64.b64encode(str(texto).encode("utf-8")).decode("ascii")
+    rawbt_url = f"rawbt:data:text/plain;base64,{texto_rawbt_b64}"
+
     html_doc = f"""
-    <div style="font-family:Arial,sans-serif;border:1px solid #ddd;border-radius:10px;padding:12px">
-      <button id="bt_{safe_key}" style="background:#174a7e;color:white;padding:12px;border:0;border-radius:8px;font-weight:bold;width:100%">
-        🖨️ Conectar e imprimir por Bluetooth
-      </button>
-      <div id="bt_status_{safe_key}" role="status" aria-live="polite" style="font-size:13px;line-height:1.4;margin-top:10px;white-space:normal;overflow-wrap:anywhere">Listo. Pulsa para buscar una impresora BLE compatible. Si no aparece el selector, revisa permisos Bluetooth de Chrome.</div>
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border:1px solid #C4D7CC;background:#F9FBF9;border-radius:10px;padding:12px;margin:8px 0">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="bt_{safe_key}" type="button" style="flex:1;min-width:180px;background:#0B3B24;color:#FFFFFF;padding:12px;border:1px solid #072617;border-radius:8px;font-weight:700;cursor:pointer">
+          📶 Conectar e imprimir por Bluetooth BLE
+        </button>
+        <a href="{rawbt_url}" target="_top" style="text-decoration:none;background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #C5A059;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">
+          📱 Imprimir con RawBT (Android SPP)
+        </a>
+      </div>
+      <div id="bt_status_{safe_key}" role="status" aria-live="polite" style="font-size:12px;line-height:1.4;margin-top:10px;color:#2B4A37">
+        <b>Nota operativa:</b> Si la impresora térmica se empareja mediante los Ajustes de Bluetooth de Android (Bluetooth Clásico SPP), pulsa el botón dorado de RawBT. Si es una impresora BLE moderna, pulsa Conectar por Bluetooth BLE.
+      </div>
     </div>
     <script>
     (() => {{
@@ -494,7 +706,7 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
       const qr = {qr_json};
       const btn = document.getElementById('bt_{safe_key}');
       const status = document.getElementById('bt_status_{safe_key}');
-      const say = t => status.textContent = t;
+      const say = t => status.innerHTML = t;
       const enc = new TextEncoder();
       const concat = (...parts) => {{ let n=parts.reduce((a,p)=>a+p.length,0), o=new Uint8Array(n), k=0; for(const p of parts){{o.set(p,k);k+=p.length;}} return o; }};
       const cmd = (...a) => new Uint8Array(a);
@@ -502,68 +714,77 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
         if (!data) return new Uint8Array();
         const b=enc.encode(data), len=b.length+3, pL=len&255, pH=(len>>8)&255;
         return concat(
-          cmd(0x1B,0x61,0x01),             // centrar
-          cmd(0x1D,0x28,0x6B,0x04,0x00,0x31,0x41,0x32,0x00), // QR model 2
-          cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x43,0x06), // tamaño módulo
-          cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x45,0x31), // corrección M
+          cmd(0x1B,0x61,0x01),
+          cmd(0x1D,0x28,0x6B,0x04,0x00,0x31,0x41,0x32,0x00),
+          cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x43,0x06),
+          cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x45,0x31),
           cmd(0x1D,0x28,0x6B,pL,pH,0x31,0x50,0x30), b,
-          cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x51,0x30), // imprimir QR
+          cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x51,0x30),
           enc.encode('\n\n'), cmd(0x1B,0x61,0x00)
         );
       }}
       async function sendChunks(ch, data) {{
-        const max = 180;
+        const max = 160;
         for(let i=0;i<data.length;i+=max) {{
           const chunk=data.slice(i,Math.min(i+max,data.length));
           if(ch.writeValueWithoutResponse) await ch.writeValueWithoutResponse(chunk);
           else if(ch.writeValueWithResponse) await ch.writeValueWithResponse(chunk);
           else await ch.writeValue(chunk);
-          await new Promise(r=>setTimeout(r,12));
+          await new Promise(r=>setTimeout(r,15));
         }}
       }}
       btn.addEventListener('click', async () => {{
-        say('Botón activado. Comprobando acceso Bluetooth…');
-        if (!window.isSecureContext) {{ say('La página no está en un contexto HTTPS seguro. Abre Club Park mediante su dirección HTTPS en Chrome.'); return; }}
-        if (!navigator.bluetooth) {{ say('Este navegador/componente no tiene acceso a Web Bluetooth. Para Bluetooth clásico SPP se necesita un puente Android; instalar paquetes Python no habilita el Bluetooth del servidor.'); return; }}
+        say('Iniciando búsqueda de impresora Bluetooth…');
+        if (!navigator.bluetooth) {{
+          say('<span style="color:#B3261E">Este navegador no soporta Web Bluetooth. Usa el botón dorado <b>Imprimir con RawBT</b> para imprimir directamente en Android.</span>');
+          return;
+        }}
         btn.disabled=true;
         try {{
-          say('Selecciona la impresora térmica en el cuadro de Bluetooth…');
+          say('Selecciona tu impresora térmica en el cuadro de diálogo…');
           const device=await navigator.bluetooth.requestDevice({{
-            acceptAllDevices:true,
-            optionalServices:['0000ffe0-0000-1000-8000-00805f9b34fb','0000ff00-0000-1000-8000-00805f9b34fb','0000ae00-0000-1000-8000-00805f9b34fb','6e400001-b5a3-f393-e0a9-e50e24dcca9e','000018f0-0000-1000-8000-00805f9b34fb']
+            acceptAllDevices: true,
+            optionalServices: [
+              '000018f0-0000-1000-8000-00805f9b34fb',
+              '0000ffe0-0000-1000-8000-00805f9b34fb',
+              '0000ff00-0000-1000-8000-00805f9b34fb',
+              '0000ae00-0000-1000-8000-00805f9b34fb',
+              '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+              'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+              '0000af30-0000-1000-8000-00805f9b34fb'
+            ]
           }});
-          say('Conectando con '+(device.name||'impresora')+'…');
-          if (!device.gatt) throw new Error('El dispositivo seleccionado no ofrece conexión GATT BLE. Puede ser Bluetooth clásico SPP.');
-          device.addEventListener('gattserverdisconnected', () => say('La impresora se desconectó. Pulsa de nuevo para reconectar.'));
+          say('Conectando con ' + (device.name || 'impresora térmica') + '…');
+          if (!device.gatt) throw new Error('El dispositivo no expone conexión GATT BLE. Utiliza el botón de RawBT.');
           const server=await device.gatt.connect();
           let characteristic=null;
           const services=await server.getPrimaryServices();
           for(const service of services) {{
-            const chars=await service.getCharacteristics();
-            characteristic=chars.find(c=>c.properties.writeWithoutResponse||c.properties.write||c.properties.writeWithResponse);
-            if(characteristic) break;
+            try {{
+              const chars=await service.getCharacteristics();
+              characteristic=chars.find(c=>c.properties.writeWithoutResponse||c.properties.write||c.properties.writeWithResponse);
+              if(characteristic) break;
+            }} catch(err){{}}
           }}
-          if(!characteristic) throw new Error('No se encontró una característica Bluetooth de escritura. Esta impresora puede ser Bluetooth clásico SPP, no BLE compatible con navegador.');
-          const init=cmd(0x1B,0x40); // ESC @
+          if(!characteristic) throw new Error('No se encontró canal de escritura ESC/POS compatible.');
+          say('Enviando datos térmicos a la impresora…');
+          const init=cmd(0x1B,0x40);
           const body=enc.encode(ticket+'\n');
           const feed=cmd(0x0A,0x0A,0x0A);
-          say(qr?'Enviando boleto y QR a la impresora…':'Enviando texto a la impresora…');
           await sendChunks(characteristic,init);
           await sendChunks(characteristic,body);
           if(qr) await sendChunks(characteristic,qrCommands(qr));
           await sendChunks(characteristic,feed);
-          say('Datos enviados. Si no imprimió, revisa papel, batería y compatibilidad BLE/ESC-POS.');
-          try {{ device.gatt.disconnect(); }} catch(e) {{}}
+          say('<span style="color:#1E4620"><b>✅ Impresión enviada con éxito.</b></span>');
+          try {{ device.gatt.disconnect(); }} catch(e){{}}
         }} catch(e) {{
-          say('No se pudo imprimir: '+(e.message||e)+'. Si la impresora se empareja desde Ajustes Android y no aparece en el selector web, probablemente usa Bluetooth clásico SPP.');
+          say('<span style="color:#B3261E">Aviso: ' + (e.message || e) + '. En teléfonos Android, usa el botón <b>Imprimir con RawBT</b>.</span>');
         }} finally {{ btn.disabled=false; }}
       }});
     }})();
     </script>
     """
-    # Altura adicional para que el estado y los errores no queden recortados en el iframe.
-    st.components.v1.html(html_doc, height=220)
-
+    st.components.v1.html(html_doc, height=200)
 
 def dinero(valor):
     try:
@@ -803,31 +1024,59 @@ if "vehiculos" not in st.session_state:
 # LOGIN
 # ---------------------------------------------------------------------
 if st.session_state.usuario_autenticado is None:
-    left, center, right = st.columns([1, 2, 1])
+    left, center, right = st.columns([1, 2.2, 1])
     with center:
-        st.markdown("<h1 style='text-align:center'>🚗 CLUB PARK</h1>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align:center'>Sistema de Control Operativo</h3>", unsafe_allow_html=True)
-        st.info("Identifícate mediante token o escanea una imagen QR con tu cámara.")
+        st.markdown("""
+        <div class="clubpark-header-card" style="text-align:center;padding:18px 20px;margin-bottom:16px">
+          <div class="clubpark-gold-badge" style="margin-bottom:6px">Acceso Operativo Oficial</div>
+          <h2 style="color:#FFFFFF !important;margin:4px 0 2px 0;font-size:22px">CLUB PARK VALET</h2>
+          <div style="font-size:12px;color:#D4AF37;letter-spacing:1px">Y ESTACIONAMIENTOS S.A. DE C.V.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.info("Identifícate mediante credencial QR o ingresa tu token operativo.")
+
         metodo = st.radio(
-            "Método de acceso",
-            ["Token manual", "Escanear QR con cámara", "Subir imagen QR"],
-            horizontal=True,
+            "Método de autenticación:",
+            [
+                "📷 Escáner QR en vivo (Cámara)",
+                "📸 Foto de QR (Cámara del dispositivo)",
+                "🖼️ Subir imagen QR",
+                "🔑 Token manual",
+            ],
+            horizontal=False,
+            key="metodo_login_operativo"
         )
+
         token = str(st.query_params.get("qrscan", "") or "").strip() or None
-        if metodo == "Token manual":
-            token_input = st.text_input("Token de acceso", type="password")
-            if st.button("Validar acceso", type="primary", use_container_width=True):
-                token = token_input.strip()
-        elif metodo == "Escanear QR con cámara":
+
+        if metodo == "📷 Escáner QR en vivo (Cámara)":
             if not token:
-                st.info("Se solicitará la cámara posterior del celular para leer el QR automáticamente.")
+                st.caption("Apunta tu cámara trasera a la credencial QR institucional.")
                 token_leido = lector_qr_camara_trasera("lector_login_trasero", height=390)
                 if token_leido:
                     token = str(token_leido).strip()
-        else:
-            archivo_qr = st.file_uploader("Sube el QR", type=["png", "jpg", "jpeg"])
+
+        elif metodo == "📸 Foto de QR (Cámara del dispositivo)":
+            if not token:
+                st.caption("Enfoca el código QR con la cámara de tu teléfono o computadora:")
+                foto_qr = st.camera_input("Capturar QR para iniciar sesión", key="camara_nativa_login")
+                if foto_qr:
+                    token_detectado = leer_codigo_qr(Image.open(foto_qr))
+                    if token_detectado:
+                        token = token_detectado.strip()
+                    else:
+                        st.warning("No se pudo detectar un código QR legible en la fotografía. Intenta enfocar más cerca.")
+
+        elif metodo == "🖼️ Subir imagen QR":
+            archivo_qr = st.file_uploader("Selecciona el archivo de tu credencial QR", type=["png", "jpg", "jpeg"])
             if archivo_qr:
                 token = leer_codigo_qr(Image.open(archivo_qr))
+
+        else:
+            token_input = st.text_input("Ingresa tu token de acceso asignado", type="password")
+            if st.button("Validar acceso", type="primary", use_container_width=True):
+                token = token_input.strip()
 
         if token:
             info = ACCESOS.get(token)
@@ -837,9 +1086,11 @@ if st.session_state.usuario_autenticado is None:
                 st.session_state.rol = info.get("rol", "Supervisor de Sucursal")
                 if "qrscan" in st.query_params:
                     del st.query_params["qrscan"]
+                st.success(f"Acceso concedido: **{info.get('nombre')}** ({info.get('rol')})")
                 st.rerun()
             else:
-                st.error("Token o QR no reconocido.")
+                st.error(f"Token o código QR no reconocido: `{token}`. Verifica con el Contador Auditor.")
+
     st.stop()
 
 
@@ -848,12 +1099,28 @@ if st.session_state.usuario_autenticado is None:
 # ---------------------------------------------------------------------
 es_contador = usuario_es_contador()
 es_global = usuario_es_global()
-st.title("CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.")
+
 sucursal_texto = "Todas (Global)" if es_global else st.session_state.sucursal_asignada
-st.caption(
-    f"Usuario: {st.session_state.usuario_autenticado} | "
-    f"Rol: {st.session_state.rol} | Sucursal: {sucursal_texto}"
-)
+
+st.markdown(f"""
+<div class="clubpark-header-card">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="clubpark-gold-badge">SISTEMA INSTITUCIONAL DE CONTROL OPERATIVO</div>
+      <h2 style="color:#FFFFFF !important;margin:6px 0 2px 0;font-size:24px">CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.</h2>
+      <div style="font-size:13px;color:#EBF3EE">
+        <b>Usuario:</b> {st.session_state.usuario_autenticado} &nbsp;|&nbsp;
+        <b>Rol:</b> {st.session_state.rol} &nbsp;|&nbsp;
+        <b>Sucursal:</b> <span style="color:#D4AF37;font-weight:700">{sucursal_texto}</span>
+      </div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:11px;color:#D4AF37;text-transform:uppercase;font-weight:700">Identidad Corporativa</div>
+      <div style="font-size:13px;font-weight:700;color:#FFFFFF">COLOR CONSTITUCIONAL: VERDE BOTELLA (#0B3B24)</div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 with st.sidebar:
     st.subheader("Panel de sesión")
@@ -866,7 +1133,7 @@ with st.sidebar:
         st.session_state.rol = None
         st.rerun()
 
-tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud = st.tabs([
+tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud, tab_qrs = st.tabs([
     "📥 Ingreso y 4 Fotografías",
     "📋 Vehículos Registrados",
     "🚘 Salida y Cobro",
@@ -876,6 +1143,7 @@ tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cie
     "💵 Cortes de Caja",
     "📒 Cierre diario por sucursal",
     "🕵️ Auditoría y WhatsApp",
+    "🏷️ Credenciales QR Institucionales",
 ])
 
 
@@ -911,17 +1179,34 @@ with tab_ing:
             key="ing_custodia_texto",
         )
     st.caption("Marca la opción rápida o describe los objetos que el cliente deja bajo resguardo.")
-    st.markdown("**📷 Fotografías de pertenencias adicionales (opcional)**")
-    st.caption("La cámara se solicita en modo posterior (trasera). Si el navegador bloquea el permiso, revisa los permisos del sitio en Chrome.")
-    foto_pertenencias_camara = camara_trasera_foto_pertenencias("foto_pertenencias_trasera", height=430)
-    fotos_pertenencias_archivos = st.file_uploader(
-        "O selecciona fotos de pertenencias", type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True, key="fotos_pertenencias_archivos"
+    st.markdown("**📷 Fotografías de pertenencias bajo resguardo (opcional)**")
+    st.caption("Puedes capturar con la cámara nativa del celular, con el visor en vivo o adjuntando fotos.")
+    
+    opc_cam_p = st.radio(
+        "Herramienta de captura:",
+        ["📸 Cámara nativa del dispositivo (Recomendado)", "📷 Visor en vivo cámara trasera", "📁 Subir fotos desde galería"],
+        horizontal=True,
+        key="selector_camara_pertenencias"
     )
-    if foto_pertenencias_camara:
-        st.image(foto_pertenencias_camara, caption="Vista previa: pertenencias", width=220)
-    if fotos_pertenencias_archivos:
-        st.caption(f"Fotos adicionales seleccionadas: {len(fotos_pertenencias_archivos)}")
+    foto_pertenencias_camara = None
+    fotos_pertenencias_archivos = []
+
+    if opc_cam_p == "📸 Cámara nativa del dispositivo (Recomendado)":
+        foto_nativa_subida = st.camera_input("Capturar foto de pertenencias", key="camara_nativa_pert")
+        if foto_nativa_subida:
+            foto_pertenencias_camara = Image.open(foto_nativa_subida)
+            st.image(foto_pertenencias_camara, caption="Fotografía de pertenencias capturada", width=260)
+    elif opc_cam_p == "📷 Visor en vivo cámara trasera":
+        foto_pertenencias_camara = camara_trasera_foto_pertenencias("foto_pertenencias_trasera", height=430)
+        if foto_pertenencias_camara:
+            st.image(foto_pertenencias_camara, caption="Fotografía de pertenencias capturada", width=260)
+    else:
+        fotos_pertenencias_archivos = st.file_uploader(
+            "Selecciona fotos de pertenencias", type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True, key="fotos_pertenencias_archivos"
+        )
+        if fotos_pertenencias_archivos:
+            st.caption(f"Fotos seleccionadas: {len(fotos_pertenencias_archivos)}")
 
     st.subheader("2. Fotografías obligatorias del vehículo")
     st.caption("Debes adjuntar las cuatro vistas antes de registrar el ingreso.")
@@ -2188,14 +2473,38 @@ with tab_aud:
             key="reiniciar_folios_admin",
         )
         texto_confirmacion = "REINICIAR TODO" if alcance_reinicio == "Toda la aplicación" else f"REINICIAR {sucursal_reinicio}"
-        confirmacion_reinicio = st.text_input(
-            f'Para confirmar, escribe exactamente: {texto_confirmacion}',
-            key="texto_confirmacion_reinicio_admin",
-        )
+        
+        def normalizar_confirmacion(txt):
+            import unicodedata
+            t = unicodedata.normalize('NFKD', str(txt or '')).encode('ASCII', 'ignore').decode('ASCII')
+            return re.sub(r'[^A-Z0-9]', '', t.upper())
+
+        col_conf1, col_conf2 = st.columns([2, 1])
+        with col_conf1:
+            confirmacion_reinicio = st.text_input(
+                f'Para confirmar, escribe: {texto_confirmacion}',
+                key="texto_confirmacion_reinicio_admin",
+                placeholder=texto_confirmacion
+            )
+        with col_conf2:
+            st.write("")
+            st.write("")
+            check_autorizar_directo = st.checkbox(
+                "✅ Autorizar reinicio",
+                key="check_autorizar_reinicio_directo",
+                help="Activa esta casilla para habilitar el botón de reinicio sin preocuparte por acentos o mayúsculas."
+            )
+
+        coincide_texto = normalizar_confirmacion(confirmacion_reinicio) == normalizar_confirmacion(texto_confirmacion)
+        puede_reiniciar = coincide_texto or check_autorizar_directo
+
+        if not puede_reiniciar:
+            st.info(f"💡 Escribe exactamente `{texto_confirmacion}` o marca la casilla 'Autorizar reinicio' para activar el botón.")
+
         if st.button(
             "🧹 Reiniciar datos operativos seleccionados",
-            type="secondary",
-            disabled=confirmacion_reinicio.strip() != texto_confirmacion,
+            type="primary" if puede_reiniciar else "secondary",
+            disabled=not puede_reiniciar,
             key="ejecutar_reinicio_admin",
         ):
             reiniciar_todo = alcance_reinicio == "Toda la aplicación"
@@ -2313,4 +2622,89 @@ if es_contador:
     else:
         st.info("Los cambios de folios, salidas y cortes aparecerán aquí.")
 
-  
+
+# ---------------------------------------------------------------------
+# TAB 10: CREDENCIALES Y CÓDIGOS QR INSTITUCIONALES
+# ---------------------------------------------------------------------
+with tab_qrs:
+    st.markdown("""
+    <div class="clubpark-header-card">
+      <div class="clubpark-gold-badge">CATÁLOGO OFICIAL DE ACCESOS Y CREDENCIALES</div>
+      <h3 style="color:#FFFFFF !important;margin:6px 0 2px 0">CÓDIGOS QR OFICIALES DE SUCURSALES Y SUPERVISIÓN</h3>
+      <div style="font-size:13px;color:#EBF3EE">
+        CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V. &nbsp;|&nbsp; Color Institucional: Verde Botella (#0B3B24)
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.write(
+        "A continuación se presentan todas las credenciales QR para el Contador Auditor, "
+        "los Supervisores Globales y los Encargados de las 23 sucursales operativas. "
+        "Puedes descargar individualmente cada código QR o descargarlos todos juntos en un archivo ZIP."
+    )
+
+    # Botón para descargar el paquete ZIP completo
+    zip_path = Path("/mnt/documents/Credenciales_QR_ClubPark_Completas.zip")
+    if zip_path.exists():
+        with open(zip_path, "rb") as fz:
+            st.download_button(
+                "📦 Descargar paquete completo de 26 Códigos QR (ZIP)",
+                data=fz.read(),
+                file_name="Credenciales_QR_ClubPark_Completas.zip",
+                mime="application/zip",
+                use_container_width=True,
+                type="primary",
+                key="descargar_todos_qrs_zip"
+            )
+
+    filtro_rol = st.radio(
+        "Filtrar catálogo:",
+        ["Todos (26 credenciales)", "Auditoría y Supervisión Global", "Encargados de Sucursal"],
+        horizontal=True,
+        key="filtro_credenciales_qr"
+    )
+
+    # Filtrar tokens
+    tokens_mostrar = {}
+    for tok, data in ACCESOS.items():
+        es_sup = "Global" in data.get("rol", "") or "Auditor" in data.get("rol", "")
+        if filtro_rol == "Auditoría y Supervisión Global" and not es_sup:
+            continue
+        if filtro_rol == "Encargados de Sucursal" and es_sup:
+            continue
+        tokens_mostrar[tok] = data
+
+    cols = st.columns(3)
+    for idx, (tok, data) in enumerate(tokens_mostrar.items()):
+        col = cols[idx % 3]
+        with col:
+            st.markdown(f"""
+            <div style="border:2px solid #0B3B24;border-radius:10px;padding:12px;background:#FFFFFF;margin-bottom:14px;box-shadow:0 3px 8px rgba(11,59,36,0.12)">
+              <div style="background:#0B3B24;color:#FFFFFF;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;margin-bottom:8px;text-align:center">
+                {data.get('rol', 'Supervisor')}
+              </div>
+              <div style="font-size:14px;font-weight:800;color:#0B3B24;text-align:center">{data.get('nombre', '')}</div>
+              <div style="font-size:12px;color:#C5A059;font-weight:700;text-align:center;margin-bottom:6px">SUCURSAL: {data.get('sucursal', '')}</div>
+              <div style="font-family:monospace;font-size:11px;background:#EBF3EE;padding:4px;border-radius:4px;text-align:center;word-break:break-all;color:#072617;margin-bottom:8px">
+                {tok}
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if QR_OK and qrcode:
+                qr_obj = qrcode.QRCode(version=1, box_size=8, border=2)
+                qr_obj.add_data(tok)
+                qr_obj.make(fit=True)
+                img_qr = qr_obj.make_image(fill_color="#0B3B24", back_color="#FFFFFF")
+                buf_qr = io.BytesIO()
+                img_qr.save(buf_qr, format="PNG")
+                qr_bytes = buf_qr.getvalue()
+                st.image(qr_bytes, width=160)
+                st.download_button(
+                    label=f"⬇️ Descargar QR",
+                    data=qr_bytes,
+                    file_name=f"QR_{tok}.png",
+                    mime="image/png",
+                    key=f"dl_qr_tab_{tok}",
+                    use_container_width=True
+                )
