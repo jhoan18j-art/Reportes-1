@@ -63,8 +63,18 @@ DATA_DIR = Path(os.environ.get("CLUBPARK_DATA_DIR", str(BASE_DIR)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PHOTO_DIR = DATA_DIR / "fotos_vehiculos"
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+# El componente HTML debe viajar en el mismo repositorio que este archivo.
+COMPONENT_DIR = BASE_DIR / "clubpark_component"
+COMPONENT_HTML = COMPONENT_DIR / "index.html"
+if not COMPONENT_HTML.is_file():
+    st.error(
+        "Falta clubpark_component/index.html. Sube la carpeta clubpark_component "
+        "al mismo nivel que streamlit_app.py en GitHub y reinicia la aplicación."
+    )
+    st.stop()
+
 CAMARA_COMPONENT = st.components.v1.declare_component(
-    "clubpark_camara_trasera", path=str(BASE_DIR / "clubpark_component")
+    "clubpark_camara_trasera", path=str(COMPONENT_DIR.resolve())
 )
 DB_FILE = DATA_DIR / "vehiculos_produccion_db.json"
 CONFIG_FILE = DATA_DIR / "config_operativa.json"
@@ -2126,15 +2136,6 @@ with tab_aud:
                 for ruta in rutas:
                     try:
                         if ruta.exists() and ruta.is_file():
-                            ruta = Path(ruta_extra)
-                        if not ruta.is_absolute():
-                            ruta = DATA_DIR / ruta
-                        rutas.append(ruta)
-                    except (TypeError, ValueError):
-                        pass
-                for ruta in rutas:
-                    try:
-                        if ruta.exists() and ruta.is_file():
                             ruta.unlink()
                             fotos_borradas += 1
                     except OSError:
@@ -2227,4 +2228,3 @@ if es_contador:
         st.dataframe(pd.DataFrame(eventos), use_container_width=True, hide_index=True)
     else:
         st.info("Los cambios de folios, salidas y cortes aparecerán aquí.")
-  
