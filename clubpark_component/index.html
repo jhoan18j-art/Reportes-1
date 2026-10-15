@@ -30,7 +30,7 @@
    catch(e){stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});}
    video.srcObject=stream; await video.play(); running=true;
    say(mode==='qr'?'Apunta la cámara trasera al QR. La lectura es automática.':'Cámara trasera activa. Encuadra las pertenencias y toma la fotografía.','ok');
-   if(mode==='qr'){ if(!window.jsQR) say('No cargó el lector QR. Comprueba la conexión y recarga la página.','err'); requestAnimationFrame(scan); }
+   if(mode==='qr') requestAnimationFrame(scan);
   }catch(e){say('No se pudo abrir la cámara. Permite el acceso a la cámara para este sitio y vuelve a intentarlo. Detalle: '+(e.message||e),'err');}
  }
  function scan(){
