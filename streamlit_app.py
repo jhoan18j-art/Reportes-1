@@ -63,16 +63,10 @@ DATA_DIR = Path(os.environ.get("CLUBPARK_DATA_DIR", str(BASE_DIR)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PHOTO_DIR = DATA_DIR / "fotos_vehiculos"
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)
-# El componente HTML debe viajar en el mismo repositorio que este archivo.
 COMPONENT_DIR = BASE_DIR / "clubpark_component"
-COMPONENT_HTML = COMPONENT_DIR / "index.html"
-if not COMPONENT_HTML.is_file():
-    st.error(
-        "Falta clubpark_component/index.html. Sube la carpeta clubpark_component "
-        "al mismo nivel que streamlit_app.py en GitHub y reinicia la aplicación."
-    )
+if not (COMPONENT_DIR / "index.html").is_file():
+    st.error("Falta clubpark_component/index.html junto a streamlit_app.py. Sube la carpeta completa al repositorio y reinicia la app.")
     st.stop()
-
 CAMARA_COMPONENT = st.components.v1.declare_component(
     "clubpark_camara_trasera", path=str(COMPONENT_DIR.resolve())
 )
@@ -472,13 +466,15 @@ def vista_comprobante_cobro(pago, registro, key="imprimir_comprobante_cobro"):
 
 
 def imprimir_partes_ticket(registro, sufijo):
+    """Muestra respaldo de texto sin llamar a una función Bluetooth inexistente.
+    La impresión física, incluido el QR gráfico, se realiza con vista_impresion_con_qr.
+    """
     primera, segunda = crear_partes_ticket(registro)
-    st.markdown("**Impresión 1: boleto del cliente**")
-    st.code(primera, language="text")
-    imprimir_bluetooth(primera, f"{sufijo}_cliente", qr_payload=qr_payload(registro))
-    st.markdown("**Impresión 2: llavero y contraseña de parabrisas**")
-    st.code(segunda, language="text")
-    imprimir_bluetooth(segunda, f"{sufijo}_contrasena")
+    with st.expander("Ver respaldo de texto del ticket", expanded=False):
+        st.markdown("**Boleto del cliente**")
+        st.code(primera, language="text")
+        st.markdown("**Llavero y contraseña**")
+        st.code(segunda, language="text")
 
 
 def dinero(valor):
@@ -783,7 +779,7 @@ with st.sidebar:
         st.rerun()
 
 tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud = st.tabs([
-    "📥 Ingreso y 4 Fotografías",
+    "📥 Ingreso y 4/6 Fotografías",
     "📋 Vehículos Registrados",
     "🚘 Salida y Cobro",
     "📈 Balances y Rentabilidad",
@@ -839,15 +835,23 @@ with tab_ing:
     if fotos_pertenencias_archivos:
         st.caption(f"Fotos adicionales seleccionadas: {len(fotos_pertenencias_archivos)}")
 
-    st.subheader("2. Fotografías obligatorias del vehículo")
-    st.caption("Debes adjuntar las cuatro vistas antes de registrar el ingreso.")
+    st.subheader("2. Fotografías de evidencia del vehículo")
+    cantidad_fotos = st.radio(
+        "Cantidad de fotografías obligatorias",
+        [4, 6], horizontal=True, format_func=lambda n: f"{n} fotografías",
+        key="cantidad_fotos_evidencia",
+        help="Elige cuatro vistas básicas o seis vistas para una evidencia más completa."
+    )
+    st.caption("Las primeras cuatro vistas son obligatorias. Si eliges seis, también debes adjuntar frente diagonal y parte trasera diagonal.")
     a, b = st.columns(2)
     with a:
         foto_frente = st.file_uploader("1. Vista frontal", type=["jpg", "jpeg", "png"], key="foto_frente")
         foto_izq = st.file_uploader("2. Costado izquierdo", type=["jpg", "jpeg", "png"], key="foto_izq")
+        foto_frente_diag = st.file_uploader("5. Frente diagonal (solo modo 6 fotos)", type=["jpg", "jpeg", "png"], key="foto_frente_diag", disabled=cantidad_fotos != 6) if cantidad_fotos == 6 else None
     with b:
         foto_der = st.file_uploader("3. Costado derecho", type=["jpg", "jpeg", "png"], key="foto_der")
         foto_tras = st.file_uploader("4. Vista trasera", type=["jpg", "jpeg", "png"], key="foto_tras")
+        foto_tras_diag = st.file_uploader("6. Parte trasera diagonal (solo modo 6 fotos)", type=["jpg", "jpeg", "png"], key="foto_tras_diag", disabled=cantidad_fotos != 6) if cantidad_fotos == 6 else None
 
     if st.button("💾 Registrar ingreso y generar ticket", type="primary", use_container_width=True):
         faltantes = []
@@ -869,6 +873,10 @@ with tab_ing:
             faltantes.append("foto derecha")
         if not foto_tras:
             faltantes.append("foto trasera")
+        if cantidad_fotos == 6 and not foto_frente_diag:
+            faltantes.append("foto frente diagonal")
+        if cantidad_fotos == 6 and not foto_tras_diag:
+            faltantes.append("foto trasera diagonal")
 
         if faltantes:
             st.error("Completa los siguientes campos: " + ", ".join(faltantes) + ".")
@@ -884,6 +892,11 @@ with tab_ing:
                 ("derecha", foto_der),
                 ("trasera", foto_tras),
             ]
+            if cantidad_fotos == 6:
+                archivos.extend([
+                    ("frente_diagonal", foto_frente_diag),
+                    ("trasera_diagonal", foto_tras_diag),
+                ])
             try:
                 for vista, archivo in archivos:
                     rutas[vista] = guardar_foto(archivo, folio, vista)
@@ -1192,8 +1205,9 @@ with tab_salida:
             "Conserve este comprobante.",
             "Gracias por su preferencia.",
         ])
-        st.markdown("**Impresión térmica Bluetooth del comprobante**")
-        imprimir_bluetooth(texto_comprobante, f"comprobante_{registro_reciente.get('id', 'reciente')}")
+        st.markdown("**Comprobante para impresión**")
+        st.code(texto_comprobante, language="text")
+        st.caption("Para imprimirlo, usa la opción de impresión del navegador. La impresión Bluetooth directa no está habilitada en esta versión.")
         st.download_button(
             "⬇️ Descargar comprobante en texto",
             data="CLUB PARK\nCOMPROBANTE DE COBRO\n" + "\n".join(
@@ -2228,3 +2242,4 @@ if es_contador:
         st.dataframe(pd.DataFrame(eventos), use_container_width=True, hide_index=True)
     else:
         st.info("Los cambios de folios, salidas y cortes aparecerán aquí.")
+  
