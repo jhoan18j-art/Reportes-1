@@ -66,6 +66,7 @@ PHOTO_DIR.mkdir(parents=True, exist_ok=True)
 DB_FILE = DATA_DIR / "vehiculos_produccion_db.json"
 CONFIG_FILE = DATA_DIR / "config_operativa.json"
 AUDIT_FILE = DATA_DIR / "auditoria_operativa.json"
+PAYMENTS_FILE = DATA_DIR / "pagos_registrados.json"
 
 PRECIOS_SUCURSALES = {
     "PAMPAS INSURGENTES": 50,
@@ -171,6 +172,42 @@ def guardar_bd(registros):
         return True
     except OSError as exc:
         st.error(f"No se pudo guardar la base de datos: {exc}")
+        return False
+
+
+def cargar_pagos_respaldo():
+    """Carga el libro independiente de cobros, además del pago dentro del vehículo."""
+    if not PAYMENTS_FILE.exists():
+        return []
+    try:
+        with PAYMENTS_FILE.open("r", encoding="utf-8") as f:
+            datos = json.load(f)
+        return datos if isinstance(datos, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def guardar_pago_respaldo(pago, registro):
+    """Guarda cada cobro en un libro separado para facilitar respaldo y auditoría."""
+    pagos = cargar_pagos_respaldo()
+    pago_respaldo = dict(pago)
+    pago_respaldo["registro_id"] = str(registro.get("id", ""))
+    pago_respaldo["sucursal"] = registro.get("sucursal", "")
+    pago_respaldo["marca"] = registro.get("marca", "")
+    pago_respaldo["placas"] = registro.get("placas", "")
+    # Evita duplicar el mismo pago si Streamlit repite el rerun.
+    pago_id = pago_respaldo.get("id_pago")
+    if pago_id and any(p.get("id_pago") == pago_id for p in pagos):
+        return True
+    pagos.insert(0, pago_respaldo)
+    temporal = PAYMENTS_FILE.with_suffix(".tmp")
+    try:
+        with temporal.open("w", encoding="utf-8") as f:
+            json.dump(pagos, f, ensure_ascii=False, indent=2)
+        os.replace(temporal, PAYMENTS_FILE)
+        return True
+    except OSError as exc:
+        st.error(f"No se pudo respaldar el cobro en el libro de pagos: {exc}")
         return False
 
 
@@ -479,14 +516,16 @@ def ruta_foto(registro, vista):
 
 
 def crear_ticket(registro):
+    """Crea ticket térmico con marcas temporales explícitas de entrada y salida."""
     folio = registro.get("id", "")
     sucursal = registro.get("sucursal", "")
     marca = registro.get("marca", "")
     placas = registro.get("placas", "")
     color = registro.get("color", "")
     tarifa = float(registro.get("tarifa", 0) or 0)
-    fecha = registro.get("fecha", "")
-    custodia = registro.get("custodia", "") or "Sin objetos declarados"
+    entrada_dt = registro.get("fecha_entrada") or registro.get("fecha", "")
+    salida_dt = registro.get("salida_fecha") or registro.get("salida_fecha_hora") or "PENDIENTE"
+    custodia = registro.get("custodia", "") or "SIN OBJETOS DECLARADOS"
     linea = "=" * 32
     guion = "-" * 32
     return f"""{linea}
@@ -498,8 +537,9 @@ FOLIO TICKET: {folio}
 TARIFA: ${tarifa:,.2f} MXN
 {guion}
 MARCA: {marca}
-PLACA: {placas}      COLOR: {color}
-ENTRADA: {fecha}    SALIDA: _______
+PLACA: {placas}  COLOR: {color}
+FECHA/HORA ENTRADA: {entrada_dt}
+FECHA/HORA SALIDA: {salida_dt}
 {guion}
 [X] OBSERVACIONES Y CUSTODIA:
 {custodia}
@@ -625,6 +665,72 @@ def leer_codigo_qr(imagen_pil):
         return valor.strip() if valor else None
     except Exception:
         return None
+
+
+def lector_qr_camara_trasera(key="lector_qr_trasero", height=390):
+    """Abre cámara posterior con getUserMedia y lee QR continuamente en móviles compatibles."""
+    html_doc = f'''    <div style="font-family:Arial,sans-serif;color:#222">
+      <video id="video_{key}" autoplay playsinline muted style="width:100%;max-height:310px;background:#111;border-radius:10px;object-fit:cover"></video>
+      <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap">
+        <button id="start_{key}" style="padding:10px 12px;font-weight:bold">📷 Abrir cámara trasera</button>
+        <button id="stop_{key}" style="padding:10px 12px">Detener cámara</button>
+      </div>
+      <div id="status_{key}" role="status" style="font-size:13px">Pulsa “Abrir cámara trasera” y concede permiso a la cámara.</div>
+    </div>
+    <script>
+    (() => {{
+      const video = document.getElementById('video_{key}');
+      const status = document.getElementById('status_{key}');
+      const start = document.getElementById('start_{key}');
+      const stop = document.getElementById('stop_{key}');
+      let stream = null, timer = null, detector = null, busy = false;
+      const stopCamera = () => {{
+        if (timer) clearTimeout(timer); timer = null;
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        stream = null; video.srcObject = null; busy = false;
+      }};
+      stop.addEventListener('click', () => {{ stopCamera(); status.textContent = 'Cámara detenida.'; }});
+      start.addEventListener('click', async () => {{
+        stopCamera();
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {{
+          status.textContent = 'Este navegador no permite abrir la cámara. Usa “Subir imagen QR” como alternativa.'; return;
+        }}
+        if (!('BarcodeDetector' in window)) {{
+          status.textContent = 'El navegador no incluye lector QR continuo. Usa “Subir imagen QR” o actualiza Chrome.'; return;
+        }}
+        try {{
+          detector = new BarcodeDetector({{formats: ['qr_code']}});
+          try {{ stream = await navigator.mediaDevices.getUserMedia({{video: {{facingMode: {{exact: 'environment'}}, width: {{ideal: 1280}}, height: {{ideal: 720}}}}, audio: false}}); }}
+          catch (e) {{ stream = await navigator.mediaDevices.getUserMedia({{video: {{facingMode: {{ideal: 'environment'}}, width: {{ideal: 1280}}, height: {{ideal: 720}}}}, audio: false}}); }}
+          video.srcObject = stream; await video.play();
+          status.textContent = 'Cámara activa. Apunta al QR del boleto; se leerá automáticamente.';
+          const scan = async () => {{
+            if (!stream || busy) return;
+            try {{
+              if (video.readyState >= 2) {{
+                const codes = await detector.detect(video);
+                if (codes && codes.length && codes[0].rawValue) {{
+                  busy = true; const value = codes[0].rawValue;
+                  status.textContent = 'QR leído. Abriendo registro…'; stopCamera();
+                  const url = new URL(window.parent.location.href);
+                  url.searchParams.set('qrscan', value);
+                  window.parent.location.href = url.toString();
+                  return;
+                }}
+              }}
+            }} catch (e) {{ /* Sigue intentando mientras la cámara esté activa. */ }}
+            timer = setTimeout(scan, 250);
+          }};
+          scan();
+        }} catch (e) {{
+          status.textContent = 'No se pudo abrir la cámara trasera. Revisa permisos del navegador y vuelve a intentarlo. Detalle: ' + (e.message || e);
+          stopCamera();
+        }}
+      }});
+      window.addEventListener('beforeunload', stopCamera);
+    }})();
+    </script>'''
+    st.components.v1.html(html_doc, height=height)
 
 
 def enlace_whatsapp(telefono, mensaje):
@@ -782,15 +888,15 @@ if st.session_state.usuario_autenticado is None:
             ["Token manual", "Escanear QR con cámara", "Subir imagen QR"],
             horizontal=True,
         )
-        token = None
+        token = str(st.query_params.get("qrscan", "") or "").strip() or None
         if metodo == "Token manual":
             token_input = st.text_input("Token de acceso", type="password")
             if st.button("Validar acceso", type="primary", use_container_width=True):
                 token = token_input.strip()
         elif metodo == "Escanear QR con cámara":
-            foto_qr = st.camera_input("Apunta la cámara al QR")
-            if foto_qr:
-                token = leer_codigo_qr(Image.open(foto_qr))
+            if not token:
+                st.info("Se solicitará la cámara posterior del celular para leer el QR automáticamente.")
+                lector_qr_camara_trasera("lector_login_trasero", height=390)
         else:
             archivo_qr = st.file_uploader("Sube el QR", type=["png", "jpg", "jpeg"])
             if archivo_qr:
@@ -802,6 +908,8 @@ if st.session_state.usuario_autenticado is None:
                 st.session_state.usuario_autenticado = info.get("nombre", "Usuario")
                 st.session_state.sucursal_asignada = info.get("sucursal", "")
                 st.session_state.rol = info.get("rol", "Supervisor de Sucursal")
+                if "qrscan" in st.query_params:
+                    del st.query_params["qrscan"]
                 st.rerun()
             else:
                 st.error("Token o QR no reconocido.")
@@ -922,7 +1030,9 @@ with tab_ing:
             st.error("Completa los siguientes campos: " + ", ".join(faltantes) + ".")
         else:
             folio, folio_numero = asignar_folio(sucursal, st.session_state.vehiculos)
-            fecha = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            ahora_entrada = datetime.now()
+            fecha = ahora_entrada.strftime("%d/%m/%Y %H:%M:%S")
+            fecha_entrada_iso = ahora_entrada.isoformat(timespec="seconds")
             rutas = {}
             archivos = [
                 ("frente", foto_frente),
@@ -943,6 +1053,12 @@ with tab_ing:
                     "folio_numero": folio_numero,
                     "qr_payload": f"CLUBPARK|VEHICULO|{folio}",
                     "fecha": fecha,
+                    "fecha_entrada": fecha,
+                    "fecha_entrada_iso": fecha_entrada_iso,
+                    "hora_entrada": ahora_entrada.strftime("%H:%M:%S"),
+                    "fecha_salida": "",
+                    "hora_salida": "",
+                    "salida_fecha": "",
                     "sucursal": sucursal,
                     "marca": marca.strip(),
                     "color": color.strip(),
@@ -1081,12 +1197,16 @@ with tab_salida:
     if metodo_busqueda == "Capturar folio":
         valor_busqueda = st.text_input("Folio del boleto", key="folio_buscar_salida").strip()
     elif metodo_busqueda == "Escanear QR con cámara":
-        imagen_qr_salida = st.camera_input("Fotografía el QR del boleto (centrado, enfocado y con buena luz)", key="camara_qr_salida")
-        if imagen_qr_salida:
-            valor_qr_leido = leer_codigo_qr(Image.open(imagen_qr_salida))
-            valor_busqueda = valor_qr_leido or ""
-            if not valor_qr_leido:
-                st.warning("No se pudo leer el QR de esta foto. Intenta acercar la cámara, enfocar el código o usa 'Subir imagen QR'.")
+        valor_query = str(st.query_params.get("qrscan", "") or "").strip()
+        if valor_query:
+            valor_busqueda = valor_query
+            st.success(f"QR leído: {valor_query}")
+            if st.button("🧹 Limpiar QR leído", key="limpiar_qr_salida"):
+                st.query_params.clear()
+                st.rerun()
+        else:
+            st.info("El lector solicita la cámara posterior. Si el navegador no admite el lector continuo, usa la opción de subir imagen QR.")
+            lector_qr_camara_trasera("lector_salida_trasero", height=390)
     else:
         archivo_qr_salida = st.file_uploader("Sube la imagen QR del ticket", type=["png", "jpg", "jpeg"], key="archivo_qr_salida")
         if archivo_qr_salida:
@@ -1112,7 +1232,8 @@ with tab_salida:
             st.write(f"**Sucursal:** {registro_salida.get('sucursal')}")
             st.write(f"**Marca/modelo:** {registro_salida.get('marca', '')}")
             st.write(f"**Placas:** {registro_salida.get('placas', '')} · **Color:** {registro_salida.get('color', '')}")
-            st.write(f"**Entrada:** {registro_salida.get('fecha', '')}")
+            st.write(f"**Fecha/hora de entrada:** {registro_salida.get('fecha_entrada', registro_salida.get('fecha', ''))}")
+            st.write(f"**Fecha/hora de salida:** {registro_salida.get('salida_fecha', 'Pendiente de salida') or 'Pendiente de salida'}")
             st.write(f"**Estado:** {registro_salida.get('estado', 'En Resguardo')}")
         with b:
             if QR_OK:
@@ -1126,16 +1247,15 @@ with tab_salida:
             tarifa_salida = dinero(registro_salida.get("tarifa", PRECIOS_SUCURSALES.get(registro_salida.get("sucursal"), 0)))
             st.metric("Tarifa fija a cobrar", f"${tarifa_salida:,.2f} MXN")
             st.caption("La tarifa se toma del registro de ingreso. Verifica cualquier cambio autorizado antes de cobrar.")
-            forma_pago = st.radio("Método de pago", ["Efectivo", "QR"], horizontal=True, key=f"pago_metodo_{registro_salida['id']}")
+            forma_pago = st.radio("Método de pago", ["Efectivo", "Tarjeta", "QR"], horizontal=True, key=f"pago_metodo_{registro_salida['id']}")
             referencia_pago = st.text_input("Referencia / autorización (si aplica)", key=f"pago_ref_{registro_salida['id']}")
             nota_pago = st.text_input("Observaciones del cobro", key=f"pago_nota_{registro_salida['id']}")
             if forma_pago == "Efectivo":
                 st.info("El efectivo se registrará como recibido al confirmar la entrega.")
+            elif forma_pago == "Tarjeta":
+                st.warning("Registra el pago con la terminal bancaria. Esta versión guarda el comprobante y la referencia capturada, pero no consulta automáticamente al banco.")
             else:
-                st.warning(
-                    "Esta versión no conecta aún con una pasarela. Cobra en la terminal/app del proveedor y "
-                    "confirma manualmente que la operación esté aprobada antes de entregar el vehículo."
-                )
+                st.warning("Cobra con la app/proveedor QR. Esta versión guarda la referencia y la confirmación del operador; no valida automáticamente la aprobación del proveedor.")
             referencia_obligatoria = forma_pago != "Efectivo"
             pago_aprobado_externamente = False
             if referencia_obligatoria:
@@ -1153,9 +1273,12 @@ with tab_salida:
                 elif referencia_obligatoria and not pago_aprobado_externamente:
                     st.error("No se registró la salida: confirma primero que el proveedor aprobó el pago.")
                 else:
-                    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    momento_operacion = datetime.now()
+                    ahora = momento_operacion.strftime("%Y-%m-%d %H:%M:%S")
                     pago = {
+                        "id_pago": str(uuid.uuid4()),
                         "fecha_hora": ahora,
+                        "fecha_hora_iso": momento_operacion.isoformat(timespec="seconds"),
                         "sucursal": registro_salida.get("sucursal"),
                         "folio": registro_salida.get("id"),
                         "importe": tarifa_salida,
@@ -1171,9 +1294,15 @@ with tab_salida:
                     registro_salida["metodo_pago"] = forma_pago
                     registro_salida["importe_cobrado"] = tarifa_salida
                     registro_salida["salida_fecha"] = ahora
+                    registro_salida["fecha_salida"] = momento_operacion.strftime("%d/%m/%Y")
+                    registro_salida["hora_salida"] = momento_operacion.strftime("%H:%M:%S")
+                    registro_salida["salida_fecha_hora_iso"] = momento_operacion.isoformat(timespec="seconds")
                     registro_salida["entregado_por"] = st.session_state.usuario_autenticado
                     registro_salida["estado"] = "Entregado"
-                    if guardar_bd(st.session_state.vehiculos):
+                    # Actualiza el ticket para que las reimpresiones posteriores reflejen la salida real.
+                    registro_salida["ticket_texto"] = crear_ticket(registro_salida)
+                    respaldo_ok = guardar_pago_respaldo(pago, registro_salida)
+                    if respaldo_ok and guardar_bd(st.session_state.vehiculos):
                         st.session_state.ultimo_comprobante_cobro = {
                             "pago": pago.copy(),
                             "registro": {
@@ -1192,7 +1321,7 @@ with tab_salida:
     if comprobante_reciente:
         st.divider()
         st.subheader("🧾 Último comprobante de cobro")
-        st.caption("El comprobante se genera después de registrar el cobro y la salida. Si el pago fue externo, la referencia es la que capturó el operador.")
+        st.caption("El comprobante se genera después del cobro y la salida. Los cobros también se guardan en un libro independiente de pagos para respaldo. En tarjeta y QR, la aprobación se confirma manualmente en la terminal/app.")
         vista_comprobante_cobro(
             comprobante_reciente.get("pago", {}),
             comprobante_reciente.get("registro", {}),
@@ -1956,6 +2085,18 @@ with tab_aud:
     c3.metric("Entregados", entregados)
 
     if visibles:
+        st.markdown("#### Revisión de registros")
+        df_aud = pd.DataFrame(visibles)
+        sucursales_aud = ["Todas"] + sorted(df_aud["sucursal"].dropna().astype(str).unique().tolist())
+        suc_aud = st.selectbox("Sucursal para auditar", sucursales_aud, key="aud_sucursal")
+        if suc_aud != "Todas":
+            df_aud = df_aud[df_aud["sucursal"] == suc_aud]
+        st.dataframe(
+            df_aud.reindex(columns=["id", "fecha", "sucursal", "marca", "placas", "tarifa", "operador", "estado"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
         st.markdown("#### Validación de las cuatro fotografías")
         for registro in visibles[:100]:
             faltan = []
@@ -1982,6 +2123,31 @@ with tab_aud:
         )
 
     if es_contador:
+        st.divider()
+        st.markdown("#### Respaldo independiente de cobros")
+        st.caption("Cada cobro guardado queda también en pagos_registrados.json, separado de la ficha del vehículo. Descarga una copia periódicamente y guárdala fuera del servidor.")
+        pagos_respaldo = cargar_pagos_respaldo()
+        st.metric("Cobros en libro de respaldo", len(pagos_respaldo))
+        if pagos_respaldo:
+            df_pagos_respaldo = pd.DataFrame(pagos_respaldo)
+            st.dataframe(df_pagos_respaldo, use_container_width=True, hide_index=True)
+            st.download_button(
+                "⬇️ Descargar respaldo de cobros (JSON)",
+                data=json.dumps(pagos_respaldo, ensure_ascii=False, indent=2).encode("utf-8"),
+                file_name=f"ClubPark_Respaldo_Cobros_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                key="descargar_respaldo_cobros_json",
+            )
+            st.download_button(
+                "📊 Descargar libro de cobros (CSV)",
+                data=df_pagos_respaldo.to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"ClubPark_Cobros_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                key="descargar_respaldo_cobros_csv",
+            )
+        else:
+            st.info("Todavía no hay cobros en el libro de respaldo. Los siguientes cobros se registrarán aquí.")
+
         st.divider()
         st.markdown("#### Conteo y consecutivo de folios por sucursal")
         st.caption("Cada sucursal tiene un prefijo exclusivo. El consecutivo continúa al día siguiente y no se reinicia al cerrar caja.")
@@ -2217,3 +2383,6 @@ if es_contador:
         st.dataframe(pd.DataFrame(eventos), use_container_width=True, hide_index=True)
     else:
         st.info("Los cambios de folios, salidas y cortes aparecerán aquí.")
+      
+        
+   
