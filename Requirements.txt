@@ -7,14 +7,3 @@ xlsxwriter
 opencv-python-headless
 numpy
 pyzbar
-Streamlit
-pandas
-Almohada
-código QR[pil]
-OpenPyXL
-xlsxwriter
-OpenCV Python sin interfaz gráfica
-numpy
-barra de Pyz
-python-escpos
-Pillow
