@@ -63,6 +63,9 @@ DATA_DIR = Path(os.environ.get("CLUBPARK_DATA_DIR", str(BASE_DIR)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PHOTO_DIR = DATA_DIR / "fotos_vehiculos"
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+CAMARA_COMPONENT = st.components.v1.declare_component(
+    "clubpark_camara_trasera", path=str(BASE_DIR / "clubpark_component")
+)
 DB_FILE = DATA_DIR / "vehiculos_produccion_db.json"
 CONFIG_FILE = DATA_DIR / "config_operativa.json"
 AUDIT_FILE = DATA_DIR / "auditoria_operativa.json"
@@ -496,7 +499,10 @@ def vehiculos_visibles(registros):
 
 def guardar_foto(uploaded_file, folio, vista):
     """Guarda una foto optimizada y devuelve su ruta relativa al directorio de datos."""
-    imagen = Image.open(uploaded_file)
+    if isinstance(uploaded_file, Image.Image):
+        imagen = uploaded_file.copy()
+    else:
+        imagen = Image.open(uploaded_file)
     imagen = ImageOps.exif_transpose(imagen).convert("RGB")
     imagen.thumbnail((1400, 1400))
     nombre = f"{folio}_{vista}.jpg"
@@ -668,197 +674,22 @@ def leer_codigo_qr(imagen_pil):
 
 
 def lector_qr_camara_trasera(key="lector_qr_trasero", height=390):
-    """Abre cámara posterior con getUserMedia y lee QR continuamente en móviles compatibles."""
-    html_doc = f'''    <div style="font-family:Arial,sans-serif;color:#222">
-      <video id="video_{key}" autoplay playsinline muted style="width:100%;max-height:310px;background:#111;border-radius:10px;object-fit:cover"></video>
-      <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap">
-        <button id="start_{key}" style="padding:10px 12px;font-weight:bold">📷 Abrir cámara trasera</button>
-        <button id="stop_{key}" style="padding:10px 12px">Detener cámara</button>
-      </div>
-      <div id="status_{key}" role="status" style="font-size:13px">Pulsa “Abrir cámara trasera” y concede permiso a la cámara.</div>
-    </div>
-    <script>
-    (() => {{
-      const video = document.getElementById('video_{key}');
-      const status = document.getElementById('status_{key}');
-      const start = document.getElementById('start_{key}');
-      const stop = document.getElementById('stop_{key}');
-      let stream = null, timer = null, detector = null, busy = false;
-      const stopCamera = () => {{
-        if (timer) clearTimeout(timer); timer = null;
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        stream = null; video.srcObject = null; busy = false;
-      }};
-      stop.addEventListener('click', () => {{ stopCamera(); status.textContent = 'Cámara detenida.'; }});
-      start.addEventListener('click', async () => {{
-        stopCamera();
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {{
-          status.textContent = 'Este navegador no permite abrir la cámara. Usa “Subir imagen QR” como alternativa.'; return;
-        }}
-        if (!('BarcodeDetector' in window)) {{
-          status.textContent = 'El navegador no incluye lector QR continuo. Usa “Subir imagen QR” o actualiza Chrome.'; return;
-        }}
-        try {{
-          detector = new BarcodeDetector({{formats: ['qr_code']}});
-          try {{ stream = await navigator.mediaDevices.getUserMedia({{video: {{facingMode: {{exact: 'environment'}}, width: {{ideal: 1280}}, height: {{ideal: 720}}}}, audio: false}}); }}
-          catch (e) {{ stream = await navigator.mediaDevices.getUserMedia({{video: {{facingMode: {{ideal: 'environment'}}, width: {{ideal: 1280}}, height: {{ideal: 720}}}}, audio: false}}); }}
-          video.srcObject = stream; await video.play();
-          status.textContent = 'Cámara activa. Apunta al QR del boleto; se leerá automáticamente.';
-          const scan = async () => {{
-            if (!stream || busy) return;
-            try {{
-              if (video.readyState >= 2) {{
-                const codes = await detector.detect(video);
-                if (codes && codes.length && codes[0].rawValue) {{
-                  busy = true; const value = codes[0].rawValue;
-                  status.textContent = 'QR leído. Abriendo registro…'; stopCamera();
-                  const url = new URL(window.parent.location.href);
-                  url.searchParams.set('qrscan', value);
-                  window.parent.location.href = url.toString();
-                  return;
-                }}
-              }}
-            }} catch (e) {{ /* Sigue intentando mientras la cámara esté activa. */ }}
-            timer = setTimeout(scan, 250);
-          }};
-          scan();
-        }} catch (e) {{
-          status.textContent = 'No se pudo abrir la cámara trasera. Revisa permisos del navegador y vuelve a intentarlo. Detalle: ' + (e.message || e);
-          stopCamera();
-        }}
-      }});
-      window.addEventListener('beforeunload', stopCamera);
-    }})();
-    </script>'''
-    st.components.v1.html(html_doc, height=height)
+    """Componente real de cámara trasera; devuelve el texto QR a Streamlit."""
+    return CAMARA_COMPONENT(mode="qr", key=key, height=height, default=None)
 
 
-def enlace_whatsapp(telefono, mensaje):
-    telefono = "".join(ch for ch in str(telefono) if ch.isdigit())
-    if len(telefono) == 10:
-        telefono = "52" + telefono
-    return f"https://wa.me/{telefono}?text={urllib.parse.quote(mensaje)}"
-
-
-def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
-    """Imprime texto y, opcionalmente, un QR ESC/POS en impresoras BLE compatibles.
-
-    En tickets de vehículo, el QR se envía como comandos ESC/POS en vez de texto,
-    porque una impresora térmica no puede imprimir un QR desde una cadena normal.
-    La compatibilidad depende de que el modelo soporte ESC/POS QR y Web Bluetooth.
-    """
-    texto_json = json.dumps(texto, ensure_ascii=False)
-    qr_json = json.dumps(qr_payload, ensure_ascii=False)
-    etiqueta = "boleto + QR de salida" if qr_payload else "comprobante / texto"
-    html_doc = f"""
-    <div style="font-family:Arial,sans-serif">
-      <button id="print_{key_suffix}" style="background:#22543D;color:white;padding:12px;
-      border:0;border-radius:8px;font-weight:bold;width:100%">
-        🖨️ Imprimir {etiqueta} en impresora guardada
-      </button>
-      <button id="forget_{key_suffix}" style="margin-top:6px;padding:7px;border:1px solid #999;border-radius:6px;width:100%">
-        Cambiar impresora guardada
-      </button>
-      <p id="status_{key_suffix}" style="font-size:12px"></p>
-    </div>
-    <script>
-    const ticket = {texto_json};
-    const qrPayload = {qr_json};
-    const btn = document.getElementById("print_{key_suffix}");
-    const forgetBtn = document.getElementById("forget_{key_suffix}");
-    const status = document.getElementById("status_{key_suffix}");
-    const storageKey = "clubpark_bt_printer_id";
-    forgetBtn.addEventListener("click", () => {{
-      try {{ localStorage.removeItem(storageKey); }} catch(e) {{}}
-      status.textContent = "Preferencia borrada. Pulsa imprimir y selecciona la impresora que quedará guardada si el navegador lo permite.";
-    }});
-    btn.addEventListener("click", async () => {{
-      if (!navigator.bluetooth) {{
-        status.textContent = "Este navegador no admite Web Bluetooth. En Android prueba Chrome; si tu impresora usa Bluetooth clásico/SPP, utiliza su aplicación o controlador compatible.";
-        return;
-      }}
-      btn.disabled = true;
-      try {{
-        let device = null;
-        let savedId = "";
-        try {{ savedId = localStorage.getItem(storageKey) || ""; }} catch(e) {{}}
-        if (savedId && navigator.bluetooth.getDevices) {{
-          const permitted = await navigator.bluetooth.getDevices();
-          device = permitted.find(d => d.id === savedId) || null;
-        }}
-        if (!device) {{
-          status.textContent = "Primera conexión: selecciona tu impresora. Intentaremos recordarla para las siguientes impresiones.";
-          device = await navigator.bluetooth.requestDevice({{
-            acceptAllDevices: true,
-            optionalServices: [
-              "00001101-0000-1000-8000-00805f9b34fb",
-              "000018f0-0000-1000-8000-00805f9b34fb"
-            ]
-          }});
-          try {{ localStorage.setItem(storageKey, device.id); }} catch(e) {{}}
-        }}
-        if (!device.gatt) throw new Error("La impresora no ofrece conexión GATT compatible con Web Bluetooth.");
-        if (device.gatt.connected === false) await device.gatt.connect();
-        const server = device.gatt;
-        const services = await server.getPrimaryServices();
-        let characteristic = null;
-        for (const service of services) {{
-          const chars = await service.getCharacteristics();
-          characteristic = chars.find(c => c.properties.writeWithoutResponse || c.properties.write);
-          if (characteristic) break;
-        }}
-        if (!characteristic) throw new Error("No se encontró una característica de escritura compatible. Muchas térmicas Bluetooth clásico necesitan su app/controlador.");
-        const encoder = new TextEncoder();
-        let bytes;
-        if (qrPayload) {{
-          // Divide el boleto antes de la línea de corte para imprimir el QR encima de ella.
-          const marcador = "[ CORTE ]";
-          const posicion = ticket.indexOf(marcador);
-          const prefijoTexto = posicion >= 0 ? ticket.slice(0, posicion) : ticket;
-          const sufijoTexto = posicion >= 0 ? ticket.slice(posicion) : "";
-          const qrData = encoder.encode(qrPayload);
-          // ESC/POS: inicializar, seleccionar QR modelo 2, tamaño, corrección M,
-          // almacenar el símbolo e imprimirlo. Requiere firmware ESC/POS compatible.
-          const setup = [
-            0x1B,0x40,
-            0x1D,0x28,0x6B,0x04,0x00,0x31,0x41,0x32,0x00,
-            0x1D,0x28,0x6B,0x03,0x00,0x31,0x43,0x06,
-            0x1D,0x28,0x6B,0x03,0x00,0x31,0x45,0x31
-          ];
-          const longitud = qrData.length + 3;
-          const almacenar = [0x1D,0x28,0x6B,longitud & 0xFF,(longitud >> 8) & 0xFF,0x31,0x50,0x30];
-          const imprimirQr = [0x1D,0x28,0x6B,0x03,0x00,0x31,0x51,0x30];
-          const prefijo = encoder.encode(prefijoTexto);
-          const leyenda = encoder.encode("\\nESCANEE PARA REGISTRAR LA SALIDA\\n\\n");
-          const sufijo = encoder.encode(sufijoTexto + "\\n\\n\\n");
-          const partes = [prefijo, Uint8Array.from(setup), Uint8Array.from(almacenar), qrData, Uint8Array.from(imprimirQr), leyenda, sufijo];
-          const total = partes.reduce((n, parte) => n + parte.length, 0);
-          bytes = new Uint8Array(total);
-          let offset = 0;
-          for (const parte of partes) {{ bytes.set(parte, offset); offset += parte.length; }}
-        }} else {{
-          bytes = encoder.encode(ticket + "\\n\\n\\n");
-        }}
-        const chunkSize = 180;
-        for (let i = 0; i < bytes.length; i += chunkSize) {{
-          const chunk = bytes.slice(i, i + chunkSize);
-          if (characteristic.writeValueWithoutResponse && characteristic.properties.writeWithoutResponse) {{
-            await characteristic.writeValueWithoutResponse(chunk);
-          }} else {{
-            await characteristic.writeValue(chunk);
-          }}
-        }}
-        status.textContent = "Datos enviados a " + (device.name || "la impresora guardada") + ". Verifica el papel: el QR requiere soporte ESC/POS QR en la impresora.";
-      }} catch (e) {{
-        status.textContent = "No se pudo imprimir: " + e.message;
-      }} finally {{
-        btn.disabled = false;
-      }}
-    }});
-    </script>
-    """
-    st.components.v1.html(html_doc, height=145)
-
+def camara_trasera_foto_pertenencias(key="foto_pertenencias_trasera", height=430):
+    """Captura evidencia usando explícitamente la cámara posterior del dispositivo."""
+    resultado = CAMARA_COMPONENT(mode="photo", key=key, height=height, default=None)
+    if not isinstance(resultado, str) or not resultado.startswith("data:image/"):
+        return None
+    try:
+        encabezado, encoded = resultado.split(",", 1)
+        imagen_bytes = base64.b64decode(encoded)
+        return Image.open(io.BytesIO(imagen_bytes)).copy()
+    except Exception:
+        st.warning("No se pudo procesar la foto. Vuelve a tomarla.")
+        return None
 
 
 # ---------------------------------------------------------------------
@@ -896,7 +727,9 @@ if st.session_state.usuario_autenticado is None:
         elif metodo == "Escanear QR con cámara":
             if not token:
                 st.info("Se solicitará la cámara posterior del celular para leer el QR automáticamente.")
-                lector_qr_camara_trasera("lector_login_trasero", height=390)
+                token_leido = lector_qr_camara_trasera("lector_login_trasero", height=390)
+                if token_leido:
+                    token = str(token_leido).strip()
         else:
             archivo_qr = st.file_uploader("Sube el QR", type=["png", "jpg", "jpeg"])
             if archivo_qr:
@@ -985,7 +818,8 @@ with tab_ing:
         )
     st.caption("Marca la opción rápida o describe los objetos que el cliente deja bajo resguardo.")
     st.markdown("**📷 Fotografías de pertenencias adicionales (opcional)**")
-    foto_pertenencias_camara = st.camera_input("Fotografiar pertenencias del cliente", key="foto_pertenencias_camara")
+    st.caption("La cámara se solicita en modo posterior (trasera). Si el navegador bloquea el permiso, revisa los permisos del sitio en Chrome.")
+    foto_pertenencias_camara = camara_trasera_foto_pertenencias("foto_pertenencias_trasera", height=430)
     fotos_pertenencias_archivos = st.file_uploader(
         "O selecciona fotos de pertenencias", type=["jpg", "jpeg", "png"],
         accept_multiple_files=True, key="fotos_pertenencias_archivos"
@@ -1198,15 +1032,16 @@ with tab_salida:
         valor_busqueda = st.text_input("Folio del boleto", key="folio_buscar_salida").strip()
     elif metodo_busqueda == "Escanear QR con cámara":
         valor_query = str(st.query_params.get("qrscan", "") or "").strip()
-        if valor_query:
-            valor_busqueda = valor_query
-            st.success(f"QR leído: {valor_query}")
+        st.info("Se abrirá la cámara posterior. Mantén el QR dentro del recuadro; al detectarlo, el lector lo enviará directamente al formulario.")
+        nonce_lector = int(st.session_state.get("qr_scan_nonce_salida", 0))
+        valor_leido = lector_qr_camara_trasera(f"lector_salida_trasero_{nonce_lector}", height=430)
+        valor_busqueda = str(valor_leido or valor_query or "").strip()
+        if valor_busqueda:
+            st.success(f"QR leído: {valor_busqueda}")
             if st.button("🧹 Limpiar QR leído", key="limpiar_qr_salida"):
+                st.session_state.qr_scan_nonce_salida = int(st.session_state.get("qr_scan_nonce_salida", 0)) + 1
                 st.query_params.clear()
                 st.rerun()
-        else:
-            st.info("El lector solicita la cámara posterior. Si el navegador no admite el lector continuo, usa la opción de subir imagen QR.")
-            lector_qr_camara_trasera("lector_salida_trasero", height=390)
     else:
         archivo_qr_salida = st.file_uploader("Sube la imagen QR del ticket", type=["png", "jpg", "jpeg"], key="archivo_qr_salida")
         if archivo_qr_salida:
@@ -2291,6 +2126,15 @@ with tab_aud:
                 for ruta in rutas:
                     try:
                         if ruta.exists() and ruta.is_file():
+                            ruta = Path(ruta_extra)
+                        if not ruta.is_absolute():
+                            ruta = DATA_DIR / ruta
+                        rutas.append(ruta)
+                    except (TypeError, ValueError):
+                        pass
+                for ruta in rutas:
+                    try:
+                        if ruta.exists() and ruta.is_file():
                             ruta.unlink()
                             fotos_borradas += 1
                     except OSError:
@@ -2383,6 +2227,4 @@ if es_contador:
         st.dataframe(pd.DataFrame(eventos), use_container_width=True, hide_index=True)
     else:
         st.info("Los cambios de folios, salidas y cortes aparecerán aquí.")
-      
-        
-   
+  
