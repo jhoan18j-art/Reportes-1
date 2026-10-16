@@ -13,11 +13,7 @@ body {
   background: transparent;
   font-size: 14px;
 }
-main {
-  padding: 8px;
-  max-width: 600px;
-  margin: 0 auto;
-}
+main { padding: 8px; max-width: 600px; margin: 0 auto; }
 .camera-container {
   position: relative;
   width: 100%;
@@ -27,62 +23,37 @@ main {
   border: 2px solid #0B3B24;
   box-shadow: 0 4px 12px rgba(11, 59, 36, 0.15);
 }
-video {
-  width: 100%;
-  max-height: 58vh;
-  object-fit: cover;
-  display: block;
-  background: #071D12;
-}
+video { width: 100%; max-height: 58vh; object-fit: cover; display: block; background: #071D12; }
 canvas { display: none; }
 .qr-overlay {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 220px;
-  height: 220px;
+  width: 230px; height: 230px;
   border: 2px dashed rgba(197, 160, 89, 0.85);
   border-radius: 16px;
   box-shadow: 0 0 0 9999px rgba(7, 29, 18, 0.45);
   pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 .qr-overlay::before, .qr-overlay::after {
   content: "";
   position: absolute;
-  width: 24px;
-  height: 24px;
+  width: 26px; height: 26px;
   border-color: #C5A059;
   border-style: solid;
 }
-.qr-overlay::before {
-  top: -2px; left: -2px;
-  border-width: 4px 0 0 4px;
-  border-top-left-radius: 12px;
-}
-.qr-overlay::after {
-  bottom: -2px; right: -2px;
-  border-width: 0 4px 4px 0;
-  border-bottom-right-radius: 12px;
-}
-.controls {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 12px 0 6px 0;
-}
-.controls button {
+.qr-overlay::before { top: -2px; left: -2px; border-width: 4px 0 0 4px; border-top-left-radius: 12px; }
+.qr-overlay::after { bottom: -2px; right: -2px; border-width: 0 4px 4px 0; border-bottom-right-radius: 12px; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 6px 0; }
+.controls button, .controls a {
   flex: 1;
-  min-width: 140px;
+  min-width: 150px;
   border: 1px solid #072617;
   border-radius: 8px;
-  padding: 11px 15px;
+  padding: 12px 15px;
   background: #0B3B24;
   color: #FFFFFF;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -90,21 +61,13 @@ canvas { display: none; }
   align-items: center;
   justify-content: center;
   gap: 6px;
+  text-decoration: none;
 }
-.controls button:hover {
-  background: #145A32;
-}
-.controls button:active {
-  transform: scale(0.98);
-}
-.controls button.secondary {
-  background: #E8EFEA;
-  color: #0B3B24;
-  border-color: #C4D7CC;
-}
-.controls button.secondary:hover {
-  background: #D9E6DE;
-}
+.controls button:hover { background: #145A32; }
+.controls button:active { transform: scale(0.98); }
+.controls button.secondary { background: #E8EFEA; color: #0B3B24; border-color: #C4D7CC; }
+.controls button.secondary:hover { background: #D9E6DE; }
+.controls button:disabled { opacity: 0.6; cursor: wait; }
 .status {
   padding: 10px 14px;
   border-radius: 8px;
@@ -114,51 +77,37 @@ canvas { display: none; }
   margin: 8px 0;
   font-weight: 500;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
-.status.ok {
-  background: #E2F0D9;
-  color: #1E4620;
-  border-color: #A9D18E;
-}
-.status.err {
-  background: #FCE4D6;
-  color: #C65911;
-  border-color: #F8CBAD;
-}
+.status.ok { background: #E2F0D9; color: #1E4620; border-color: #A9D18E; }
+.status.err { background: #FCE4D6; color: #C65911; border-color: #F8CBAD; }
 .hidden { display: none !important; }
-#preview {
-  width: 100%;
-  border-radius: 12px;
-  border: 2px solid #0B3B24;
-  margin-top: 8px;
-  display: block;
-}
+#preview { width: 100%; border-radius: 12px; border: 2px solid #0B3B24; margin-top: 8px; display: block; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.4.0/dist/streamlit-component-lib.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 </head>
 <body>
 <main>
-  <div id="status" class="status">Iniciando sistema de cámara institucional Club Park…</div>
-  
+  <div id="status" class="status">Sistema de cámara institucional Club Park listo. Pulsa el botón verde para activar la cámara.</div>
+
   <div class="camera-container" id="cameraBox">
     <video id="video" autoplay playsinline muted></video>
     <div id="qrOverlay" class="qr-overlay"></div>
   </div>
-  
+
   <canvas id="canvas"></canvas>
-  <img id="preview" class="hidden" alt="Vista previa de pertenencias">
+  <img id="preview" class="hidden" alt="Vista previa">
 
   <!-- Controles QR -->
   <div class="controls" id="qrControls">
     <button id="startQR" type="button">📷 Activar cámara trasera</button>
-    <button id="switchQR" class="secondary" type="button">🔄 Cambiar cámara</button>
-    <button id="stopQR" class="secondary" type="button">⏹️ Detener</button>
+    <button id="switchQR" class="secondary hidden" type="button">🔄 Cambiar cámara</button>
+    <button id="stopQR" class="secondary hidden" type="button">⏹️ Detener</button>
   </div>
 
-  <!-- Controles FOTO PERTENENCIAS -->
+  <!-- Controles FOTO -->
   <div class="controls hidden" id="photoControls">
     <button id="startPhoto" type="button">📷 Activar cámara trasera</button>
     <button id="capturePhoto" class="hidden" type="button">📸 Tomar fotografía</button>
@@ -166,7 +115,7 @@ canvas { display: none; }
     <button id="stopPhoto" class="secondary hidden" type="button">⏹️ Detener</button>
   </div>
 
-  <!-- Controles de ACEPTACIÓN / RETOMA -->
+  <!-- ACEPTAR / RETOMAR -->
   <div class="controls hidden" id="resultControls">
     <button id="accept" type="button">✅ Usar esta fotografía</button>
     <button id="retake" class="secondary" type="button">🔄 Volver a tomar</button>
@@ -175,28 +124,29 @@ canvas { display: none; }
 
 <script>
 (function() {
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('canvas');
+  const $ = id => document.getElementById(id);
+  const video = $('video');
+  const canvas = $('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  const preview = document.getElementById('preview');
-  const cameraBox = document.getElementById('cameraBox');
-  const qrOverlay = document.getElementById('qrOverlay');
-  const status = document.getElementById('status');
+  const preview = $('preview');
+  const cameraBox = $('cameraBox');
+  const qrOverlay = $('qrOverlay');
+  const status = $('status');
 
-  const qrControls = document.getElementById('qrControls');
-  const startQRBtn = document.getElementById('startQR');
-  const switchQRBtn = document.getElementById('switchQR');
-  const stopQRBtn = document.getElementById('stopQR');
+  const qrControls = $('qrControls');
+  const startQRBtn = $('startQR');
+  const switchQRBtn = $('switchQR');
+  const stopQRBtn = $('stopQR');
 
-  const photoControls = document.getElementById('photoControls');
-  const startPhotoBtn = document.getElementById('startPhoto');
-  const capturePhotoBtn = document.getElementById('capturePhoto');
-  const switchPhotoBtn = document.getElementById('switchPhoto');
-  const stopPhotoBtn = document.getElementById('stopPhoto');
+  const photoControls = $('photoControls');
+  const startPhotoBtn = $('startPhoto');
+  const capturePhotoBtn = $('capturePhoto');
+  const switchPhotoBtn = $('switchPhoto');
+  const stopPhotoBtn = $('stopPhoto');
 
-  const resultControls = document.getElementById('resultControls');
-  const acceptBtn = document.getElementById('accept');
-  const retakeBtn = document.getElementById('retake');
+  const resultControls = $('resultControls');
+  const acceptBtn = $('accept');
+  const retakeBtn = $('retake');
 
   let mode = 'qr';
   let stream = null;
@@ -204,28 +154,28 @@ canvas { display: none; }
   let currentFacing = 'environment';
   let lastValue = '';
   let capturedDataUrl = '';
-  let scanRafId = null;
+  let scanTimerId = null;
+  let autoIntentado = false;
 
   function send(val) {
-    if (window.Streamlit && Streamlit.setComponentValue) {
-      Streamlit.setComponentValue(val);
-    }
+    if (window.Streamlit && Streamlit.setComponentValue) Streamlit.setComponentValue(val);
   }
 
-  function say(msg, kind = '') {
+  function say(msg, kind) {
     status.textContent = msg;
     status.className = 'status' + (kind ? ' ' + kind : '');
+    ajustarAlto();
+  }
+
+  function ajustarAlto() {
     if (window.Streamlit && Streamlit.setFrameHeight) {
-      setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 15), 50);
+      setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 15), 60);
     }
   }
 
   function stop() {
     running = false;
-    if (scanRafId) {
-      cancelAnimationFrame(scanRafId);
-      scanRafId = null;
-    }
+    if (scanTimerId) { clearInterval(scanTimerId); scanTimerId = null; }
     if (stream) {
       stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
       stream = null;
@@ -235,114 +185,121 @@ canvas { display: none; }
   }
 
   function updateButtonVisibility() {
+    qrControls.classList.toggle('hidden', mode !== 'qr');
+    photoControls.classList.toggle('hidden', mode === 'qr');
+    qrOverlay.classList.toggle('hidden', !(mode === 'qr' && running));
+
     if (mode === 'qr') {
-      qrControls.classList.remove('hidden');
-      photoControls.classList.add('hidden');
-      resultControls.classList.add('hidden');
       cameraBox.classList.remove('hidden');
-      qrOverlay.classList.remove('hidden');
       preview.classList.add('hidden');
-      startQRBtn.textContent = running ? '🟢 Cámara activa' : '📷 Activar cámara trasera';
+      resultControls.classList.add('hidden');
+      startQRBtn.classList.remove('hidden');
+      startQRBtn.textContent = running ? '🟢 Cámara activa - escaneando…' : '📷 Activar cámara trasera';
+      startQRBtn.disabled = running;
+      switchQRBtn.classList.toggle('hidden', !running);
+      stopQRBtn.classList.toggle('hidden', !running);
+    } else if (capturedDataUrl) {
+      cameraBox.classList.add('hidden');
+      preview.classList.remove('hidden');
+      photoControls.classList.add('hidden');
+      resultControls.classList.remove('hidden');
     } else {
-      qrControls.classList.add('hidden');
-      photoControls.classList.remove('hidden');
-      qrOverlay.classList.add('hidden');
-      if (capturedDataUrl) {
-        cameraBox.classList.add('hidden');
-        preview.classList.remove('hidden');
-        photoControls.classList.add('hidden');
-        resultControls.classList.remove('hidden');
-      } else {
-        cameraBox.classList.remove('hidden');
-        preview.classList.add('hidden');
-        resultControls.classList.add('hidden');
-        if (running) {
-          startPhotoBtn.classList.add('hidden');
-          capturePhotoBtn.classList.remove('hidden');
-          switchPhotoBtn.classList.remove('hidden');
-          stopPhotoBtn.classList.remove('hidden');
-        } else {
-          startPhotoBtn.classList.remove('hidden');
-          capturePhotoBtn.classList.add('hidden');
-          switchPhotoBtn.classList.add('hidden');
-          stopPhotoBtn.classList.add('hidden');
-        }
-      }
+      cameraBox.classList.remove('hidden');
+      preview.classList.add('hidden');
+      resultControls.classList.add('hidden');
+      startPhotoBtn.classList.toggle('hidden', running);
+      capturePhotoBtn.classList.toggle('hidden', !running);
+      switchPhotoBtn.classList.toggle('hidden', !running);
+      stopPhotoBtn.classList.toggle('hidden', !running);
     }
-    if (window.Streamlit && Streamlit.setFrameHeight) {
-      setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 15), 50);
-    }
+    ajustarAlto();
   }
 
-  async function start(facing = currentFacing) {
+  async function start(facing) {
     stop();
-    currentFacing = facing;
+    currentFacing = facing || currentFacing;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      say('Este navegador no permite acceso a la cámara. Abre la app en Chrome / Safari con HTTPS.', 'err');
+      say('Este navegador no permite acceso a la cámara desde aquí. Abre la app en Chrome (Android) o Safari (iPhone) y usa la opción «Cámara del dispositivo».', 'err');
       return;
     }
-    say('Solicitando acceso a la cámara (' + (facing === 'environment' ? 'trasera' : 'frontal') + ')…');
-    try {
-      // 1. Intento estricto con facingMode solicitado
-      const constraintsList = [
-        { audio: false, video: { facingMode: { exact: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-        { audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-        { audio: false, video: { facingMode: facing } },
-        { audio: false, video: true }
-      ];
-      let lastErr = null;
-      for (const c of constraintsList) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(c);
-          if (stream) break;
-        } catch(err) {
-          lastErr = err;
-        }
+    const etiqueta = currentFacing === 'environment' ? 'trasera' : 'frontal';
+    say('Solicitando permiso de cámara ' + etiqueta + '… Acepta el permiso del navegador.');
+    const intentos = [
+      { audio: false, video: { facingMode: { exact: currentFacing }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { audio: false, video: { facingMode: { ideal: currentFacing }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { audio: false, video: { facingMode: currentFacing } },
+      { audio: false, video: true }
+    ];
+    let ultimoError = null;
+    for (const c of intentos) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(c);
+        if (stream) break;
+      } catch(err) { ultimoError = err; }
+    }
+    if (!stream) {
+      const nombre = ultimoError && ultimoError.name || 'Error';
+      if (nombre === 'NotAllowedError' || nombre === 'SecurityError') {
+        say('Permiso de cámara DENEGADO. Toca el candado / icono junto a la dirección del sitio y permite la cámara, luego pulsa de nuevo. Alternativa garantizada: usa la opción «Cámara del dispositivo».', 'err');
+      } else if (nombre === 'NotFoundError') {
+        say('No se encontró ninguna cámara disponible en este dispositivo.', 'err');
+      } else {
+        say('No se pudo abrir la cámara (' + nombre + '). Si estás dentro de una ventana integrada, abre la app a pantalla completa o usa «Cámara del dispositivo».', 'err');
       }
-      if (!stream) throw (lastErr || new Error('No se pudo abrir ningún dispositivo de cámara.'));
-
+      updateButtonVisibility();
+      return;
+    }
+    try {
       video.srcObject = stream;
       await video.play();
-      running = true;
-      capturedDataUrl = '';
-      updateButtonVisibility();
-
-      if (mode === 'qr') {
-        say('Apunta la cámara al código QR. El encuadre y lectura son automáticos.', 'ok');
-        scanRafId = requestAnimationFrame(scanLoop);
-      } else {
-        say('Cámara lista. Encuadra las pertenencias y pulsa "Tomar fotografía".', 'ok');
-      }
-    } catch(err) {
-      say('No se pudo abrir la cámara. Permite el permiso en tu navegador o selecciona otra cámara. Detalle: ' + (err.message || err), 'err');
-      updateButtonVisibility();
+    } catch(e) {}
+    running = true;
+    capturedDataUrl = '';
+    lastValue = '';
+    updateButtonVisibility();
+    if (mode === 'qr') {
+      say('🟢 Cámara ' + etiqueta + ' activa. Apunta al código QR; la lectura es automática.', 'ok');
+      iniciarEscaneo();
+    } else {
+      say('🟢 Cámara ' + etiqueta + ' lista. Encuadra y pulsa «Tomar fotografía».', 'ok');
     }
   }
 
-  function scanLoop() {
+  function iniciarEscaneo() {
+    if (scanTimerId) clearInterval(scanTimerId);
+    scanTimerId = setInterval(scanFrame, 120);
+  }
+
+  function scanFrame() {
     if (!running || mode !== 'qr') return;
-    if (video.readyState >= 2 && video.videoWidth > 0) {
-      const w = video.videoWidth;
-      const h = video.videoHeight;
-      canvas.width = w;
-      canvas.height = h;
-      ctx.drawImage(video, 0, 0, w, h);
-      try {
-        const imageData = ctx.getImageData(0, 0, w, h);
-        const code = window.jsQR ? jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' }) : null;
-        if (code && code.data && code.data.trim()) {
-          const val = code.data.trim();
-          if (val !== lastValue) {
-            lastValue = val;
-            say('✅ Código QR reconocido: ' + val, 'ok');
-            send(val);
-            stop();
-            return;
-          }
-        }
-      } catch(e) {}
-    }
-    scanRafId = requestAnimationFrame(scanLoop);
+    if (video.readyState < 2 || !video.videoWidth) return;
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    canvas.width = w;
+    canvas.height = h;
+    ctx.drawImage(video, 0, 0, w, h);
+    let valor = null;
+    try {
+      if (window.BarcodeDetector) {
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        detector.detect(video).then(codigos => {
+          if (codigos && codigos.length && codigos[0].rawValue) procesarLectura(codigos[0].rawValue);
+        }).catch(() => {});
+        if (valor) return;
+      }
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const code = window.jsQR ? jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' }) : null;
+      if (code && code.data && code.data.trim()) procesarLectura(code.data.trim());
+    } catch(e) {}
+  }
+
+  function procesarLectura(val) {
+    val = String(val || '').trim();
+    if (!val || val === lastValue) return;
+    lastValue = val;
+    say('✅ Código QR reconocido: ' + val, 'ok');
+    send(val);
+    stop();
   }
 
   function captureSnapshot() {
@@ -350,24 +307,20 @@ canvas { display: none; }
       say('Primero activa la cámara para capturar la imagen.', 'err');
       return;
     }
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    canvas.width = w;
-    canvas.height = h;
-    ctx.drawImage(video, 0, 0, w, h);
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     capturedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
     preview.src = capturedDataUrl;
     stop();
-    say('Fotografía capturada. Revisa la imagen y confirma.', 'ok');
+    say('Fotografía capturada. Revisa la imagen y confirma, o vuelve a tomarla.', 'ok');
     updateButtonVisibility();
   }
 
   function switchCamera() {
-    const nextFacing = (currentFacing === 'environment') ? 'user' : 'environment';
-    start(nextFacing);
+    start(currentFacing === 'environment' ? 'user' : 'environment');
   }
 
-  // Event Listeners
   startQRBtn.onclick = () => start('environment');
   switchQRBtn.onclick = switchCamera;
   stopQRBtn.onclick = () => { stop(); say('Cámara detenida.'); };
@@ -391,35 +344,36 @@ canvas { display: none; }
   };
 
   function onRender(event) {
-    const args = (event && event.detail && event.detail.args) || {};
+    const args = (event && event.detail && event.detail.args) || (window.Streamlit && event.detail ? {} : {});
     mode = (args.mode === 'photo') ? 'photo' : 'qr';
     const targetH = Number(args.height || 400);
     video.style.maxHeight = Math.max(220, Math.min(targetH, 620)) + 'px';
 
     updateButtonVisibility();
 
-    // Auto-arranque si aún no está corriendo
-    if (!running && !capturedDataUrl) {
+    // Un único intento automático; si el navegador lo bloquea, el botón verde queda siempre visible.
+    if (!running && !capturedDataUrl && !autoIntentado) {
+      autoIntentado = true;
       if (mode === 'qr') {
-        say('Iniciando lector QR. Apunta al código institucional…');
+        say('Iniciando lector QR institucional. Si no abre, pulsa «Activar cámara trasera».');
         start('environment');
       } else {
-        say('Pulsa "Activar cámara trasera" para fotografiar pertenencias.');
+        say('Pulsa «Activar cámara trasera» para fotografiar las pertenencias.');
       }
     }
+    ajustarAlto();
   }
 
   window.addEventListener('message', e => {
-    if (e.data && e.data.type === 'streamlit:render') {
-      onRender(e);
-    }
+    if (e.data && e.data.type === 'streamlit:render') onRender(e);
   });
 
   if (window.Streamlit) {
     Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
     Streamlit.setComponentReady();
-    Streamlit.setFrameHeight(480);
+    Streamlit.setFrameHeight(460);
   }
+  ajustarAlto();
 })();
 </script>
 </body>
