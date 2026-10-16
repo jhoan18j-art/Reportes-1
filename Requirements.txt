@@ -6,4 +6,5 @@ openpyxl
 xlsxwriter
 opencv-python-headless
 numpy
+zxing-cpp
 pyzbar
