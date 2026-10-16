@@ -497,6 +497,47 @@ CODIGOS_SUCURSAL = {
 }
 
 
+# ---------------------------------------------------------------------
+# REGISTRO DE ERRORES DE IMPRESIÓN (RawBT / ESC-POS)
+# ---------------------------------------------------------------------
+ARCHIVO_REGISTRO_IMPRESION = DATA_DIR / "registro_impresion.json"
+ETAPAS_IMPRESION = {
+    "CONEXION": "Fallo de conexión: RawBT no se abrió o no hay impresora emparejada/configurada",
+    "ENVIO_ESCPOS": "Fallo de envío ESC/POS: RawBT se abrió pero el binario no llegó a la impresora",
+    "IMPRESORA": "Fallo de la impresora: el dato llegó pero no imprimió (papel, energía, cabezal o Bluetooth)",
+    "IMPRESION_OK": "Impresión correcta",
+}
+
+
+def cargar_registro_impresion():
+    """Lee la bitácora de impresión (lista de eventos, más recientes primero)."""
+    try:
+        datos = json.loads(ARCHIVO_REGISTRO_IMPRESION.read_text(encoding="utf-8"))
+        return datos if isinstance(datos, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def registrar_evento_impresion(etapa, detalle, resultado="FALLO"):
+    """Guarda un evento de impresión clasificado (conexión, envío ESC/POS o impresora)."""
+    eventos = cargar_registro_impresion()
+    eventos.insert(0, {
+        "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "usuario": st.session_state.get("usuario_autenticado") or "Sesión local",
+        "etapa": etapa,
+        "resultado": resultado,
+        "diagnóstico": ETAPAS_IMPRESION.get(etapa, "Evento de impresión"),
+        "detalle": str(detalle)[:300],
+    })
+    try:
+        ARCHIVO_REGISTRO_IMPRESION.write_text(
+            json.dumps(eventos[:300], ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
+    return eventos[:300]
+
+
 def codigo_sucursal(sucursal):
     """Código estable y exclusivo para que los folios no choquen entre sucursales."""
     nombre = str(sucursal or "").strip().upper()
@@ -938,6 +979,71 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
     st.components.v1.html(html_doc, height=310)
 
 
+def generar_ticket_prueba_impresion():
+    """Ticket corto de verificación: valida que la impresora reciba y procese ESC/POS + QR."""
+    ahora = datetime.now()
+    lineas = [
+        "       PRUEBA DE IMPRESIÓN",
+        " CLUB PARK VALET Y ESTACIONAMIENTOS",
+        "  SISTEMA INSTITUCIONAL DE CONTROL",
+        "------------------------------------",
+        f" FECHA  : {ahora.strftime('%d/%m/%Y %H:%M:%S')}",
+        f" USUARIO: {st.session_state.get('usuario_autenticado') or 'Sesión local'}",
+        " PRUEBA : BINARIO ESC/POS + QR",
+        " Si lees este texto, la impresora",
+        " recibe y procesa los datos.",
+        "------------------------------------",
+    ]
+    return "\n".join(lineas), f"CLUBPARK|PRUEBA|{ahora:%Y%m%d%H%M%S}"
+
+
+def panel_prueba_impresion(key_sufijo="diag", expandido=True):
+    """Prueba de impresión con registro de errores RawBT: clasifica los fallos en
+    conexión, envío ESC/POS o impresora y los guarda en la bitácora del sistema."""
+    with st.expander("🧪 Prueba de impresión y registro de errores RawBT", expanded=expandido):
+        texto_prueba, qr_prueba = generar_ticket_prueba_impresion()
+        st.code(texto_prueba)
+        imprimir_bluetooth(texto_prueba, key_suffix=f"prueba_{key_sufijo}", qr_payload=qr_prueba)
+        st.markdown("**¿Qué resultado obtuviste al pulsar el botón RawBT?**")
+        resultado = st.radio(
+            "Resultado de la prueba de impresión",
+            [
+                "✅ Imprimió correctamente",
+                "🔌 No se abrió RawBT / no hay impresora (fallo de conexión)",
+                "📡 RawBT se abrió pero el binario no llegó (fallo de envío ESC/POS)",
+                "🖨️ El dato llegó pero no imprimió (fallo de la impresora)",
+            ],
+            index=None,
+            key=f"res_prueba_{key_sufijo}",
+            label_visibility="collapsed",
+        )
+        detalle_extra = st.text_input(
+            "Detalle opcional (modelo de impresora, mensaje visto, paso donde se detuvo)",
+            key=f"det_prueba_{key_sufijo}",
+        )
+        if resultado is None:
+            st.caption("Selecciona el resultado y regístralo: el sistema distingue si los fallos son de conexión, envío o impresora.")
+        else:
+            if "Imprimió correctamente" in resultado:
+                etapa = "IMPRESION_OK"
+            elif "No se abrió RawBT" in resultado:
+                etapa = "CONEXION"
+            elif "no llegó" in resultado:
+                etapa = "ENVIO_ESCPOS"
+            else:
+                etapa = "IMPRESORA"
+            if st.button("📋 Registrar resultado en la bitácora de impresión",
+                         key=f"reg_prueba_{key_sufijo}", use_container_width=True):
+                eventos = registrar_evento_impresion(etapa, detalle_extra or resultado,
+                                                     "OK" if etapa == "IMPRESION_OK" else "FALLO")
+                st.success(f"Registrado: {ETAPAS_IMPRESION[etapa]}")
+                st.dataframe(pd.DataFrame(eventos[:15]), use_container_width=True, hide_index=True)
+        eventos_log = cargar_registro_impresion()
+        if eventos_log:
+            st.markdown("**Bitácora de impresión (últimos 15 eventos)**")
+            st.dataframe(pd.DataFrame(eventos_log[:15]), use_container_width=True, hide_index=True)
+
+
 def dinero(valor):
     try:
         return float(valor or 0)
@@ -1224,7 +1330,7 @@ def lector_qr_camara_trasera(key="lector_qr_trasero", height=390):
     Usa el lector robusto (preprocesamiento + 3 decodificadores) sobre la captura."""
     foto_qr = st.camera_input(
         "Capturar el código QR", key=key,
-        help="En Chrome Android usa el botón «Cambiar cámara» para pasar a la trasera. Enfoca el QR a 10-15 cm con buena luz.",
+        help="La app pide permiso de cámara y abre la del teléfono. Si no abre o abre la frontal, usa «Subir foto del código QR»: al elegir Cámara en el selector de Android se usa la cámara trasera. Enfoca el QR a 10-15 cm con buena luz.",
     )
     if foto_qr is None:
         st.caption("¿La cámara no abre en tu navegador? Sube una fotografía del código QR.")
@@ -1248,6 +1354,7 @@ def camara_trasera_foto_pertenencias(key="foto_pertenencias_trasera", height=430
     """Captura fotográfica con la cámara del dispositivo, sin componentes externos."""
     captura = st.camera_input("Tomar fotografía", key=key)
     if captura is None:
+        st.caption("Si la cámara no abre o abrió la frontal, cambia el modo a «📁 Subir fotos»: al elegir la opción Cámara en el selector de Android se usa la cámara trasera del teléfono.")
         return None
     try:
         return Image.open(captura).copy()
@@ -1369,6 +1476,24 @@ def ejecutar_pruebas_operativas():
         assert b"PRUEBA BOLETO" in payload
         return f"Binario ESC/POS válido de {len(payload)} bytes con QR"
 
+    def prueba_impresion_rawbt():
+        """Valida el payload de prueba y la bitácora de errores de impresión (ida y vuelta)."""
+        texto, qr = generar_ticket_prueba_impresion()
+        payload = construir_payload_escpos(texto, qr)
+        assert payload[:2] == b"\x1b@", "Falta inicialización ESC @"
+        assert b"\x1d(\x6b" in payload, "Faltan comandos del QR en el payload de prueba"
+        previos = len(cargar_registro_impresion())
+        registrar_evento_impresion("IMPRESION_OK", "Prueba operativa automática de impresión")
+        eventos = cargar_registro_impresion()
+        assert len(eventos) == previos + 1, "La bitácora de impresión no guardó el evento"
+        ultimo = eventos[0]
+        assert ultimo.get("etapa") == "IMPRESION_OK" and "diagnóstico" in ultimo, "Evento incompleto"
+        eventos.pop(0)  # limpia el evento de prueba para no ensuciar la bitácora real
+        ARCHIVO_REGISTRO_IMPRESION.write_text(
+            json.dumps(eventos, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return f"Payload ESC/POS de prueba ({len(payload)} bytes) y bitácora RawBT operativos"
+
     def prueba_credenciales():
         assert isinstance(ACCESOS, dict) and ACCESOS, "No hay credenciales cargadas"
         for token, datos in ACCESOS.items():
@@ -1398,6 +1523,7 @@ def ejecutar_pruebas_operativas():
     registrar("Generación y lectura de código QR", prueba_qr)
     registrar("Partes del ticket (boleto + llavero)", prueba_partes_ticket)
     registrar("Binario de impresión térmica ESC/POS", prueba_escpos)
+    registrar("Prueba de impresión y bitácora RawBT", prueba_impresion_rawbt)
     registrar("Integridad de credenciales QR", prueba_credenciales)
     registrar("Bitácora de auditoría", prueba_auditoria)
     registrar("Carpeta de fotografías del vehículo", prueba_fotos)
@@ -1681,6 +1807,7 @@ with tab_ing:
         horizontal=True,
         key="selector_camara_vehiculo_v6",
     )
+    st.caption("Si la cámara del navegador no abre o abre la frontal, cambia a «📁 Subir fotos desde galería»: en el selector de Android elige «Cámara» para capturar con la cámara trasera del teléfono.")
 
     VISTAS_COMPLETAS = [
         ("frente", "1. Vista frontal"),
@@ -1854,6 +1981,19 @@ with tab_list:
                         st.image(str(p), use_container_width=True)
                     else:
                         st.warning("Foto no disponible")
+            fotos_custodia_detalle = detalle.get("fotos_custodia", []) or []
+            if fotos_custodia_detalle:
+                st.markdown("**📷 Evidencia fotográfica de pertenencias**")
+                cols_custodia = st.columns(min(3, len(fotos_custodia_detalle)))
+                for i, ruta_extra in enumerate(fotos_custodia_detalle):
+                    p_extra = Path(ruta_extra)
+                    if not p_extra.is_absolute():
+                        p_extra = DATA_DIR / p_extra
+                    with cols_custodia[i % len(cols_custodia)]:
+                        if p_extra.exists():
+                            st.image(str(p_extra), caption=f"Pertenencia {i + 1}", use_container_width=True)
+                        else:
+                            st.warning("Foto no disponible")
             fotos_custodia_detalle = detalle.get("fotos_custodia", []) or []
             if fotos_custodia_detalle:
                 st.markdown("**📷 Evidencia fotográfica de pertenencias**")
@@ -2699,6 +2839,7 @@ with tab_cierre_diario:
 # ---------------------------------------------------------------------
 with tab_imp:
     st.subheader("Re-impresión de tickets")
+    panel_prueba_impresion(key_sufijo="reimpresion", expandido=False)
     visibles = vehiculos_visibles(st.session_state.vehiculos)
     if not visibles:
         st.info("No hay tickets disponibles.")
@@ -2924,6 +3065,12 @@ with tab_aud:
         gastos_file_admin = DATA_DIR / "gastos_operativos.json"
         cortes_file_admin = DATA_DIR / "cortes_caja.json"
         config_admin_backup = cargar_config()
+        # Blindaje institucional: los respaldos siempre quedan definidos antes de los
+        # intentos de lectura, de modo que ninguna ruta de ejecución llegue al
+        # diccionario de respaldo con nombres sin definir (NameError).
+        cierres_admin_backup = []
+        gastos_admin_backup = []
+        cortes_admin_backup = []
         try:
             cierres_admin_backup = json.loads(cierres_file_admin.read_text(encoding="utf-8")) if cierres_file_admin.exists() else []
         except (OSError, json.JSONDecodeError):
@@ -2933,7 +3080,7 @@ with tab_aud:
         except (OSError, json.JSONDecodeError):
             gastos_admin_backup = []
         try:
-            cortes_dmin_backup = json.loads(cortes_file_admin.read_text(encoding="utf-8")) if cortes_file_admin.exists() else []
+            cortes_admin_backup = json.loads(cortes_file_admin.read_text(encoding="utf-8")) if cortes_file_admin.exists() else []
         except (OSError, json.JSONDecodeError):
             cortes_admin_backup = []
         respaldo_admin = {
@@ -3241,6 +3388,7 @@ with tab_pruebas:
         "Verifica en segundos que los componentes críticos funcionan antes de abrir la jornada: "
         "base de datos, folios, códigos QR, boletos térmicos, credenciales, bitácora y fotografías."
     )
+    panel_prueba_impresion(key_sufijo="pruebas", expandido=False)
     if st.button("▶️ Ejecutar pruebas operativas", type="primary", use_container_width=True, key="btn_ejecutar_pruebas"):
         resultados_pruebas = ejecutar_pruebas_operativas()
         st.session_state["resultados_pruebas"] = resultados_pruebas
@@ -3286,3 +3434,25 @@ with tab_intel:
         st.markdown("**Recomendaciones automáticas**")
         for recomendacion in recomendaciones:
             st.markdown(f"- {recomendacion}")
+
+    st.markdown("**Salud de la impresión térmica (RawBT)**")
+    eventos_imp = cargar_registro_impresion()
+    fallos_imp = [e for e in eventos_imp if e.get("resultado") == "FALLO"]
+    col_i1, col_i2, col_i3 = st.columns(3)
+    col_i1.metric("Intentos registrados", len(eventos_imp))
+    col_i2.metric("Fallos registrados", len(fallos_imp))
+    col_i3.metric("Último evento", eventos_imp[0]["fecha_hora"] if eventos_imp else "—")
+    if fallos_imp:
+        por_etapa = {}
+        for e in fallos_imp:
+            clave = e.get("etapa", "OTRO")
+            por_etapa[clave] = por_etapa.get(clave, 0) + 1
+        detalle_etapas = " · ".join(
+            f"{ETAPAS_IMPRESION.get(k, k)}: {v}" for k, v in por_etapa.items()
+        )
+        st.warning("Fallos de impresión detectados → " + detalle_etapas)
+        st.dataframe(pd.DataFrame(fallos_imp[:10]), use_container_width=True, hide_index=True)
+    elif eventos_imp:
+        st.success("La impresión térmica opera sin fallos registrados.")
+    else:
+        st.caption("Aún no hay eventos de impresión: ejecuta la prueba de impresión en 🧪 Pruebas Operativas o en 🖨️ Re-Impresión Térmica.")
