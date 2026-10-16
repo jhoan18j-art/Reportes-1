@@ -17,6 +17,7 @@ import json
 import os
 import re
 import uuid
+import zipfile
 import urllib.parse
 import html
 import base64
@@ -158,6 +159,20 @@ div[data-testid="stAlert"] {
 """
 st.markdown(CSS_INSTITUCIONAL, unsafe_allow_html=True)
 
+# ---------------------------------------------------------------------
+# LOGOTIPO INSTITUCIONAL (embebido: no requiere archivos en el repositorio)
+# ---------------------------------------------------------------------
+LOGO_CLUBPARK_B64 = "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
+LOGO_MIME = "image/webp"
+
+
+def logo_html(width=220, margen="0 0 8px 0", display="block"):
+    return (
+        f'<img src="data:{LOGO_MIME};base64,{LOGO_CLUBPARK_B64}" '
+        f'alt="Logotipo CLUB PARK VALET Y ESTACIONAMIENTOS" '
+        f'style="width:{width}px;max-width:95%;display:{display};margin:{margen};filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35))">'
+    )
+
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("CLUBPARK_DATA_DIR", str(BASE_DIR)))
@@ -263,11 +278,54 @@ TOKENS_POR_DEFECTO = {
     "CPV-QR-EBNI": {"nombre": "Encargado E-BNI", "sucursal": "E-BNI", "rol": "Supervisor de Sucursal"},
     "CPV-QR-CHURRAS": {"nombre": "Encargado Churrasquería", "sucursal": "CHURRASQUERIA", "rol": "Supervisor de Sucursal"},
 }
-TOKENS_JSON = os.environ.get("CLUBPARK_TOKENS_JSON", "").strip()
+# ---------------------------------------------------------------------
+# CARGA PROTEGIDA DE CREDENCIALES QR
+# Prioridad: 1) st.secrets  2) variable de entorno CLUBPARK_TOKENS_JSON
+# 3) tokens por defecto del código (solo contingencia; la app avisa en
+# pantalla para moverlos a st.secrets lo antes posible).
+# ---------------------------------------------------------------------
+def cargar_accesos_protegidos():
+    fuente = "por_defecto"
+    accesos = None
+    try:
+        if "CLUBPARK_TOKENS_JSON" in st.secrets:
+            accesos = json.loads(str(st.secrets["CLUBPARK_TOKENS_JSON"]))
+            fuente = "secrets"
+        elif "CLUBPARK_TOKENS" in st.secrets:
+            accesos = {clave: dict(valor) for clave, valor in st.secrets["CLUBPARK_TOKENS"].items()}
+            fuente = "secrets"
+    except Exception:
+        accesos = None
+    if not accesos:
+        tokens_env = os.environ.get("CLUBPARK_TOKENS_JSON", "").strip()
+        if tokens_env:
+            try:
+                accesos = json.loads(tokens_env)
+                fuente = "entorno"
+            except json.JSONDecodeError:
+                st.warning("CLUBPARK_TOKENS_JSON no contiene JSON válido; se ignoró.")
+                accesos = None
+    if not (isinstance(accesos, dict) and accesos):
+        accesos = dict(TOKENS_POR_DEFECTO)
+        fuente = "por_defecto"
+    return accesos, fuente
+
+
+ACCESOS, ACCESOS_FUENTE = cargar_accesos_protegidos()
+
 try:
-    ACCESOS = json.loads(TOKENS_JSON) if TOKENS_JSON else TOKENS_POR_DEFECTO
-except json.JSONDecodeError:
-    ACCESOS = TOKENS_POR_DEFECTO
+    APP_URL = str(st.secrets.get("CLUBPARK_APP_URL", "") or os.environ.get("CLUBPARK_APP_URL", "")).strip()
+except Exception:
+    APP_URL = str(os.environ.get("CLUBPARK_APP_URL", "")).strip()
+
+
+def contenido_qr_para(token):
+    """Contenido del QR de la credencial: si se configura CLUBPARK_APP_URL el QR
+    abre la app con la sesión lista al escanearlo con la cámara del teléfono."""
+    if APP_URL:
+        separador = "&" if "?" in APP_URL else "?"
+        return f"{APP_URL}{separador}qrscan={token}"
+    return token
 
 # Agrega aquí los tokens QR de encargados de sucursal o define todos en
 # CLUBPARK_TOKENS_JSON. Formato:
@@ -678,34 +736,75 @@ def imprimir_partes_ticket(registro, sufijo):
     imprimir_bluetooth(segunda, f"{sufijo}_contrasena")
 
 
+def construir_payload_escpos(texto, qr_payload_txt=None):
+    """Construye el binario ESC/POS completo: inicialización, texto, código QR y avance.
+    El mismo binario se envía por RawBT (Bluetooth clásico SPP en Android) o por Web Bluetooth (BLE)."""
+    partes = bytearray()
+    partes += bytes((0x1B, 0x40))  # ESC @ : inicializar impresora
+    try:
+        partes += str(texto).encode("cp437", errors="replace")
+    except Exception:
+        partes += str(texto).encode("utf-8", errors="replace")
+    partes += b"\n\n\n"
+    if qr_payload_txt:
+        datos_qr = str(qr_payload_txt).encode("utf-8")
+        longitud = len(datos_qr) + 3
+        pL, pH = longitud & 0xFF, (longitud >> 8) & 0xFF
+        partes += bytes((0x1B, 0x61, 0x01))  # ESC a 1 : centrado
+        partes += bytes((0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00))  # modelo QR
+        partes += bytes((0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x06))  # tamaño módulo
+        partes += bytes((0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31))  # nivel corrección M
+        partes += bytes((0x1D, 0x28, 0x6B, pL, pH, 0x31, 0x50, 0x30)) + datos_qr  # datos
+        partes += bytes((0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30))  # imprimir QR
+        partes += bytes((0x1B, 0x61, 0x00))  # ESC a 0 : alineación izquierda
+    partes += bytes((0x0A, 0x0A, 0x0A, 0x0A))  # avance de papel
+    return bytes(partes)
+
+
 def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
-    """Impresión ESC/POS por Web Bluetooth con catálogo amplio de impresoras BLE y opción RawBT."""
+    """Impresión térmica por Bluetooth: binario ESC/POS completo (texto + QR) para
+    impresoras Bluetooth clásico SPP vía RawBT, botón de compartir, y Web Bluetooth BLE."""
     texto_json = json.dumps(str(texto), ensure_ascii=False)
     qr_json = json.dumps(str(qr_payload or ""), ensure_ascii=False)
     safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", str(key_suffix))
-    texto_rawbt_b64 = base64.b64encode(str(texto).encode("utf-8")).decode("ascii")
-    rawbt_url = f"rawbt:data:text/plain;base64,{texto_rawbt_b64}"
+
+    payload_binario = construir_payload_escpos(texto, qr_payload)
+    payload_b64 = base64.b64encode(payload_binario).decode("ascii")
+    texto_b64 = base64.b64encode(str(texto).encode("utf-8")).decode("ascii")
 
     html_doc = f"""
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border:1px solid #C4D7CC;background:#F9FBF9;border-radius:10px;padding:12px;margin:8px 0">
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="bt_{safe_key}" type="button" style="flex:1;min-width:180px;background:#0B3B24;color:#FFFFFF;padding:12px;border:1px solid #072617;border-radius:8px;font-weight:700;cursor:pointer">
-          📶 Conectar e imprimir por Bluetooth BLE
-        </button>
-        <a href="{rawbt_url}" target="_top" style="text-decoration:none;background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #C5A059;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">
-          📱 Imprimir con RawBT (Android SPP)
+        <a href="rawbt:data:application/octet-stream;base64,{payload_b64}" target="_top"
+           style="flex:1;min-width:200px;text-decoration:none;background:#0B3B24;color:#FFFFFF;padding:12px;border:1px solid #072617;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">
+          🖨️ Imprimir por Bluetooth (RawBT - Android)
         </a>
+        <a href="rawbt:data:text/plain;base64,{texto_b64}" target="_top"
+           style="text-decoration:none;background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #C5A059;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">
+          📄 RawBT solo texto
+        </a>
+        <button id="cp_share_{safe_key}" type="button"
+           style="background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #C5A059;border-radius:8px;font-weight:700;cursor:pointer">
+          📤 Compartir / Copiar
+        </button>
       </div>
-      <div id="bt_status_{safe_key}" role="status" aria-live="polite" style="font-size:12px;line-height:1.4;margin-top:10px;color:#2B4A37">
-        <b>Nota operativa:</b> Si la impresora térmica se empareja mediante los Ajustes de Bluetooth de Android (Bluetooth Clásico SPP), pulsa el botón dorado de RawBT. Si es una impresora BLE moderna, pulsa Conectar por Bluetooth BLE.
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button id="cp_bt_{safe_key}" type="button"
+           style="background:#145A32;color:#FFFFFF;padding:11px;border:1px solid #072617;border-radius:8px;font-weight:700;cursor:pointer">
+          📶 Conectar e imprimir por Bluetooth BLE (Chrome)
+        </button>
+      </div>
+      <div id="cp_status_{safe_key}" role="status" aria-live="polite" style="font-size:12px;line-height:1.45;margin-top:10px;color:#2B4A37">
+        <b>Cómo imprimir correctamente:</b> 1) Instala la app gratuita <b>RawBT</b> desde Play Store. 2) Empareja tu impresora térmica en Ajustes &gt; Bluetooth de Android. 3) Pulsa el botón verde <b>RawBT</b>; elige la impresora emparejada. El boleto sale con su código QR. Si tu impresora es BLE moderna, usa el botón inferior en Chrome.
       </div>
     </div>
     <script>
     (() => {{
       const ticket = {texto_json};
       const qr = {qr_json};
-      const btn = document.getElementById('bt_{safe_key}');
-      const status = document.getElementById('bt_status_{safe_key}');
+      const btnBle = document.getElementById('cp_bt_{safe_key}');
+      const btnShare = document.getElementById('cp_share_{safe_key}');
+      const status = document.getElementById('cp_status_{safe_key}');
       const say = t => status.innerHTML = t;
       const enc = new TextEncoder();
       const concat = (...parts) => {{ let n=parts.reduce((a,p)=>a+p.length,0), o=new Uint8Array(n), k=0; for(const p of parts){{o.set(p,k);k+=p.length;}} return o; }};
@@ -720,7 +819,7 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
           cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x45,0x31),
           cmd(0x1D,0x28,0x6B,pL,pH,0x31,0x50,0x30), b,
           cmd(0x1D,0x28,0x6B,0x03,0x00,0x31,0x51,0x30),
-          enc.encode('\n\n'), cmd(0x1B,0x61,0x00)
+          cmd(0x1B,0x61,0x00)
         );
       }}
       async function sendChunks(ch, data) {{
@@ -733,13 +832,23 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
           await new Promise(r=>setTimeout(r,15));
         }}
       }}
-      btn.addEventListener('click', async () => {{
-        say('Iniciando búsqueda de impresora Bluetooth…');
+      btnShare.addEventListener('click', async () => {{
+        try {{
+          if (navigator.share) {{
+            await navigator.share({{ title: 'Boleto Club Park', text: ticket }});
+            say('<b>Boleto enviado al menú de compartir.</b> Elige RawBT (o tu app de impresión) para mandarlo a la impresora.');
+          }} else {{
+            await navigator.clipboard.writeText(ticket);
+            say('<b>Boleto copiado al portapapeles.</b> Pégalo en RawBT o en la app de tu impresora.');
+          }}
+        }} catch(e) {{ say('No se pudo compartir: ' + (e.message || e)); }}
+      }});
+      btnBle.addEventListener('click', async () => {{
         if (!navigator.bluetooth) {{
-          say('<span style="color:#B3261E">Este navegador no soporta Web Bluetooth. Usa el botón dorado <b>Imprimir con RawBT</b> para imprimir directamente en Android.</span>');
+          say('<span style="color:#B3261E">Este navegador no soporta Web Bluetooth (requiere Chrome en Android o desktop). Usa el botón verde <b>RawBT</b>, que funciona con TODAS las impresoras Bluetooth clásicas de Android.</span>');
           return;
         }}
-        btn.disabled=true;
+        btnBle.disabled=true;
         try {{
           say('Selecciona tu impresora térmica en el cuadro de diálogo…');
           const device=await navigator.bluetooth.requestDevice({{
@@ -754,11 +863,12 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
               '0000af30-0000-1000-8000-00805f9b34fb'
             ]
           }});
-          say('Conectando con ' + (device.name || 'impresora térmica') + '…');
-          if (!device.gatt) throw new Error('El dispositivo no expone conexión GATT BLE. Utiliza el botón de RawBT.');
+          const nombre = device.name || 'impresora térmica';
+          say('Conectando con <b>' + nombre + '</b>…');
+          if (!device.gatt) throw new Error('El dispositivo no expone conexión GATT (es Bluetooth clásico). Usa el botón verde RawBT.');
           const server=await device.gatt.connect();
-          let characteristic=null;
           const services=await server.getPrimaryServices();
+          let characteristic=null;
           for(const service of services) {{
             try {{
               const chars=await service.getCharacteristics();
@@ -766,8 +876,8 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
               if(characteristic) break;
             }} catch(err){{}}
           }}
-          if(!characteristic) throw new Error('No se encontró canal de escritura ESC/POS compatible.');
-          say('Enviando datos térmicos a la impresora…');
+          if(!characteristic) throw new Error('No se encontró canal de escritura ESC/POS en ' + nombre + '. Usa RawBT.');
+          say('Enviando boleto y QR a <b>' + nombre + '</b>…');
           const init=cmd(0x1B,0x40);
           const body=enc.encode(ticket+'\n');
           const feed=cmd(0x0A,0x0A,0x0A);
@@ -775,16 +885,17 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
           await sendChunks(characteristic,body);
           if(qr) await sendChunks(characteristic,qrCommands(qr));
           await sendChunks(characteristic,feed);
-          say('<span style="color:#1E4620"><b>✅ Impresión enviada con éxito.</b></span>');
+          say('<span style="color:#1E4620"><b>✅ Impresión enviada a ' + nombre + ' con éxito.</b></span>');
           try {{ device.gatt.disconnect(); }} catch(e){{}}
         }} catch(e) {{
-          say('<span style="color:#B3261E">Aviso: ' + (e.message || e) + '. En teléfonos Android, usa el botón <b>Imprimir con RawBT</b>.</span>');
-        }} finally {{ btn.disabled=false; }}
+          say('<span style="color:#B3261E">Aviso: ' + (e.message || e) + '. Si la impresora se empareja por los Ajustes de Android, es Bluetooth clásico y DEBES usar el botón verde <b>RawBT</b>.</span>');
+        }} finally {{ btnBle.disabled=false; }}
       }});
     }})();
     </script>
     """
-    st.components.v1.html(html_doc, height=200)
+    st.components.v1.html(html_doc, height=280)
+
 
 def dinero(valor):
     try:
@@ -970,6 +1081,16 @@ def generar_excel_oficial(df):
 
 
 def leer_codigo_qr(imagen_pil):
+    # 1) zxing-cpp: decodificador robusto, no requiere librerías del sistema
+    try:
+        import zxingcpp
+        resultados = zxingcpp.read_barcodes(imagen_pil)
+        for r in resultados:
+            texto = getattr(r, "text", "") or ""
+            if texto.strip():
+                return texto.strip()
+    except Exception:
+        pass
     try:
         from pyzbar.pyzbar import decode
         resultado = decode(imagen_pil)
@@ -1008,6 +1129,121 @@ def camara_trasera_foto_pertenencias(key="foto_pertenencias_trasera", height=430
 
 
 # ---------------------------------------------------------------------
+# PRUEBAS OPERATIVAS (autodiagnóstico institucional)
+# ---------------------------------------------------------------------
+def ejecutar_pruebas_operativas():
+    """Ejecuta una batería de pruebas sobre los componentes críticos de la app."""
+    resultados = []
+
+    def registrar(nombre, funcion):
+        try:
+            detalle = funcion()
+            resultados.append({"prueba": nombre, "estado": "✅", "detalle": detalle or "OK"})
+        except Exception as exc:
+            resultados.append({"prueba": nombre, "estado": "❌", "detalle": str(exc)[:220]})
+
+    def prueba_base_datos():
+        archivo = DATA_DIR / "_prueba_operativa.json"
+        datos = [{"id": "CP-TEST-000001", "sucursal": "RAMMA"}]
+        with archivo.open("w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False)
+        with archivo.open("r", encoding="utf-8") as f:
+            leido = json.load(f)
+        archivo.unlink()
+        assert leido == datos
+        return "Escritura y lectura JSON correctas"
+
+    def prueba_folios():
+        registros = [
+            {"id": "CP-RAM-000005", "sucursal": "RAMMA", "folio_numero": 5},
+            {"id": "CP-SUS-000002", "sucursal": "SUSHITTO", "folio_numero": 2},
+        ]
+        folio1, num1 = asignar_folio("RAMMA", registros)
+        assert folio1.startswith("CP-RAM-") and num1 >= 6, f"folio inesperado {folio1}"
+        folio2, num2 = asignar_folio("SUSHITTO", registros)
+        assert folio2.startswith("CP-SUS-") and num2 >= 3
+        config = cargar_config()
+        config["siguiente_folio"]["RAMMA"] = 6
+        config["siguiente_folio"]["SUSHITTO"] = 3
+        guardar_config(config)
+        return f"Secuencias independientes por sucursal ({folio1} / {folio2})"
+
+    def prueba_qr():
+        if not QR_OK:
+            raise RuntimeError("Instala qrcode[pil]")
+        registro = {"id": "CP-RAM-000099"}
+        png = generar_qr_bytes(registro)
+        assert png and png[:8] == b"\x89PNG\r\n\x1a\n", "El QR no es un PNG válido"
+        texto = None
+        try:
+            import zxingcpp
+            decodificados = zxingcpp.read_barcodes(Image.open(io.BytesIO(png)))
+            texto = decodificados[0].text if decodificados else None
+        except Exception:
+            try:
+                from pyzbar.pyzbar import decode as decode_zbar
+                detectados = decode_zbar(Image.open(io.BytesIO(png)))
+                texto = detectados[0].data.decode() if detectados else None
+            except Exception:
+                raise RuntimeError("Instala zxing-cpp para verificar la lectura del QR")
+        assert texto == qr_payload(registro), f"QR decodificado {texto} != {qr_payload(registro)}"
+        return f"QR generado y releído correctamente ({texto})"
+
+    def prueba_partes_ticket():
+        registro = {
+            "id": "CP-RAM-000099", "sucursal": "RAMMA", "marca": "Aveo", "color": "Azúl",
+            "placas": "ABC-123-D", "tarifa": 70, "operador": "Prueba",
+            "fecha": "01/01/2026 10:00:00", "custodia": "Prueba",
+        }
+        registro["ticket_texto"] = crear_ticket(registro)
+        primera, segunda = crear_partes_ticket(registro)
+        assert registro["id"] in primera, "El folio no aparece en el boleto del cliente"
+        assert "LLAVERO" in segunda.upper() or "CONTRASE" in segunda.upper(), "Falta el llavero"
+        return "Boleto del cliente y llavero separados con folio"
+
+    def prueba_escpos():
+        payload = construir_payload_escpos("PRUEBA BOLETO", "CLUBPARK|VEHICULO|CP-RAM-000099")
+        assert payload[:2] == b"\x1b@", "Falta inicialización ESC @"
+        assert b"\x1d(\x6b" in payload, "Faltan comandos del código QR"
+        assert b"PRUEBA BOLETO" in payload
+        return f"Binario ESC/POS válido de {len(payload)} bytes con QR"
+
+    def prueba_credenciales():
+        assert isinstance(ACCESOS, dict) and ACCESOS, "No hay credenciales cargadas"
+        for token, datos in ACCESOS.items():
+            assert datos.get("nombre") and datos.get("sucursal") and datos.get("rol"), f"Credencial incompleta: {token}"
+        faltantes = [suc for suc in PRECIOS_SUCURSALES if not any(d.get("sucursal") == suc for d in ACCESOS.values())]
+        assert not faltantes, f"Sucursales sin credencial: {faltantes}"
+        return f"{len(ACCESOS)} credenciales completas (fuente: {ACCESOS_FUENTE})"
+
+    def prueba_auditoria():
+        guardar_evento_auditoria("PRUEBA_OPERATIVA", {"mensaje": "Prueba automática de bitácora"})
+        eventos = cargar_auditoria()
+        assert any(e.get("tipo") == "PRUEBA_OPERATIVA" for e in eventos), "El evento no se registró"
+        return f"Bitácora con {len(eventos)} eventos"
+
+    def prueba_fotos():
+        assert PHOTO_DIR.exists() and os.access(PHOTO_DIR, os.W_OK), "La carpeta de fotos no es escribible"
+        return f"Carpeta de fotografías escribible ({PHOTO_DIR.name})"
+
+    def prueba_config():
+        config = cargar_config()
+        assert isinstance(config.get("siguiente_folio"), dict)
+        return f"Configuración con {len(config['siguiente_folio'])} sucursales"
+
+    registrar("Base de datos (JSON) escritura y lectura", prueba_base_datos)
+    registrar("Folios independientes por sucursal", prueba_folios)
+    registrar("Generación y lectura de código QR", prueba_qr)
+    registrar("Partes del ticket (boleto + llavero)", prueba_partes_ticket)
+    registrar("Binario de impresión térmica ESC/POS", prueba_escpos)
+    registrar("Integridad de credenciales QR", prueba_credenciales)
+    registrar("Bitácora de auditoría", prueba_auditoria)
+    registrar("Carpeta de fotografías del vehículo", prueba_fotos)
+    registrar("Configuración de folios", prueba_config)
+    return resultados
+
+
+# ---------------------------------------------------------------------
 # ESTADO DE SESIÓN
 # ---------------------------------------------------------------------
 if "usuario_autenticado" not in st.session_state:
@@ -1026,8 +1262,9 @@ if "vehiculos" not in st.session_state:
 if st.session_state.usuario_autenticado is None:
     left, center, right = st.columns([1, 2.2, 1])
     with center:
-        st.markdown("""
+        st.markdown(f"""
         <div class="clubpark-header-card" style="text-align:center;padding:18px 20px;margin-bottom:16px">
+          {logo_html(250, '4px auto 8px auto')}
           <div class="clubpark-gold-badge" style="margin-bottom:6px">Acceso Operativo Oficial</div>
           <h2 style="color:#FFFFFF !important;margin:4px 0 2px 0;font-size:22px">CLUB PARK VALET</h2>
           <div style="font-size:12px;color:#D4AF37;letter-spacing:1px">Y ESTACIONAMIENTOS S.A. DE C.V.</div>
@@ -1039,10 +1276,10 @@ if st.session_state.usuario_autenticado is None:
         metodo = st.radio(
             "Método de autenticación:",
             [
-                "📷 Escáner QR en vivo (Cámara)",
-                "📸 Foto de QR (Cámara del dispositivo)",
+                "📸 Foto de QR con la cámara del dispositivo (Recomendado)",
                 "🖼️ Subir imagen QR",
                 "🔑 Token manual",
+                "📷 Visor en vivo de QR (experimental)",
             ],
             horizontal=False,
             key="metodo_login_operativo"
@@ -1050,25 +1287,25 @@ if st.session_state.usuario_autenticado is None:
 
         token = str(st.query_params.get("qrscan", "") or "").strip() or None
 
-        if metodo == "📷 Escáner QR en vivo (Cámara)":
+        if metodo.startswith("📸"):
             if not token:
-                st.caption("Apunta tu cámara trasera a la credencial QR institucional.")
-                token_leido = lector_qr_camara_trasera("lector_login_trasero", height=390)
-                if token_leido:
-                    token = str(token_leido).strip()
-
-        elif metodo == "📸 Foto de QR (Cámara del dispositivo)":
-            if not token:
-                st.caption("Enfoca el código QR con la cámara de tu teléfono o computadora:")
+                st.caption("Pulsa el botón: se abrirá la cámara de tu teléfono (usa la trasera). Enfoca la credencial QR a 10-15 cm.")
                 foto_qr = st.camera_input("Capturar QR para iniciar sesión", key="camara_nativa_login")
                 if foto_qr:
                     token_detectado = leer_codigo_qr(Image.open(foto_qr))
                     if token_detectado:
                         token = token_detectado.strip()
                     else:
-                        st.warning("No se pudo detectar un código QR legible en la fotografía. Intenta enfocar más cerca.")
+                        st.warning("No se detectó un QR legible. Acércate, mejora la luz y vuelve a tomar la foto.")
 
-        elif metodo == "🖼️ Subir imagen QR":
+        elif metodo.startswith("📷"):
+            if not token:
+                st.caption("Si el navegador bloquea la cámara del visor (común en móviles por los permisos de ventanas integradas), usa la opción recomendada de arriba o el token manual.")
+                token_leido = lector_qr_camara_trasera("lector_login_trasero", height=390)
+                if token_leido:
+                    token = str(token_leido).strip()
+
+        elif metodo.startswith("🖼️"):
             archivo_qr = st.file_uploader("Selecciona el archivo de tu credencial QR", type=["png", "jpg", "jpeg"])
             if archivo_qr:
                 token = leer_codigo_qr(Image.open(archivo_qr))
@@ -1115,6 +1352,7 @@ st.markdown(f"""
       </div>
     </div>
     <div style="text-align:right">
+      {logo_html(230, '0 0 6px 0')}
       <div style="font-size:11px;color:#D4AF37;text-transform:uppercase;font-weight:700">Identidad Corporativa</div>
       <div style="font-size:13px;font-weight:700;color:#FFFFFF">COLOR CONSTITUCIONAL: VERDE BOTELLA (#0B3B24)</div>
     </div>
@@ -1123,6 +1361,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 with st.sidebar:
+    st.markdown(logo_html(200, '0 0 4px 0'), unsafe_allow_html=True)
     st.subheader("Panel de sesión")
     st.write(f"**Usuario:** {st.session_state.usuario_autenticado}")
     st.write(f"**Rol:** {st.session_state.rol}")
@@ -1133,8 +1372,8 @@ with st.sidebar:
         st.session_state.rol = None
         st.rerun()
 
-tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud, tab_qrs = st.tabs([
-    "📥 Ingreso y 4 Fotografías",
+tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud, tab_qrs, tab_pruebas = st.tabs([
+    "📥 Ingreso y 6 Fotografías",
     "📋 Vehículos Registrados",
     "🚘 Salida y Cobro",
     "📈 Balances y Rentabilidad",
@@ -1144,6 +1383,7 @@ tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cie
     "📒 Cierre diario por sucursal",
     "🕵️ Auditoría y WhatsApp",
     "🏷️ Credenciales QR Institucionales",
+    "🧪 Pruebas Operativas",
 ])
 
 
@@ -1208,15 +1448,38 @@ with tab_ing:
         if fotos_pertenencias_archivos:
             st.caption(f"Fotos seleccionadas: {len(fotos_pertenencias_archivos)}")
 
-    st.subheader("2. Fotografías obligatorias del vehículo")
-    st.caption("Debes adjuntar las cuatro vistas antes de registrar el ingreso.")
-    a, b = st.columns(2)
-    with a:
-        foto_frente = st.file_uploader("1. Vista frontal", type=["jpg", "jpeg", "png"], key="foto_frente")
-        foto_izq = st.file_uploader("2. Costado izquierdo", type=["jpg", "jpeg", "png"], key="foto_izq")
-    with b:
-        foto_der = st.file_uploader("3. Costado derecho", type=["jpg", "jpeg", "png"], key="foto_der")
-        foto_tras = st.file_uploader("4. Vista trasera", type=["jpg", "jpeg", "png"], key="foto_tras")
+    st.subheader("2. Operación de 6 fotografías del vehículo")
+    st.caption("Las 6 vistas del vehículo son OBLIGATORIAS antes de registrar el ingreso: protegen al operador y a la empresa frente a reclamaciones de daños o pérdida de pertenencias.")
+    opc_cam_v = st.radio(
+        "Herramienta de captura del vehículo:",
+        ["📸 Cámara nativa del dispositivo (Recomendado)", "📁 Subir fotos desde galería"],
+        horizontal=True,
+        key="selector_camara_vehiculo",
+    )
+
+    VISTAS_VEHICULO = [
+        ("frente", "1. Vista frontal"),
+        ("trasera", "2. Vista trasera"),
+        ("izquierda", "3. Costado izquierdo"),
+        ("derecha", "4. Costado derecho"),
+        ("tablero", "5. Tablero / kilometraje"),
+        ("interior", "6. Interior / asientos"),
+    ]
+    fotos_vehiculo = {}
+    for clave_vista, titulo_vista in VISTAS_VEHICULO:
+        if opc_cam_v.startswith("📸"):
+            fotos_vehiculo[clave_vista] = st.camera_input(
+                f"{titulo_vista} (obligatoria)", key=f"foto_veh_{clave_vista}"
+            )
+        else:
+            fotos_vehiculo[clave_vista] = st.file_uploader(
+                f"{titulo_vista} (obligatoria)", type=["jpg", "jpeg", "png"], key=f"foto_veh_{clave_vista}"
+            )
+    faltan_fotos = [titulo_vista for clave_vista, titulo_vista in VISTAS_VEHICULO if not fotos_vehiculo.get(clave_vista)]
+    capturadas = 6 - len(faltan_fotos)
+    st.progress(capturadas / 6.0, text=f"Fotografías del vehículo capturadas: {capturadas} de 6")
+    if faltan_fotos:
+        st.info("Faltan las siguientes vistas: " + ", ".join(faltan_fotos))
 
     if st.button("💾 Registrar ingreso y generar ticket", type="primary", use_container_width=True):
         faltantes = []
@@ -1230,14 +1493,7 @@ with tab_ing:
             faltantes.append("placas")
         if not operador.strip():
             faltantes.append("operador")
-        if not foto_frente:
-            faltantes.append("foto frontal")
-        if not foto_izq:
-            faltantes.append("foto izquierda")
-        if not foto_der:
-            faltantes.append("foto derecha")
-        if not foto_tras:
-            faltantes.append("foto trasera")
+        faltantes.extend(faltan_fotos)
 
         if faltantes:
             st.error("Completa los siguientes campos: " + ", ".join(faltantes) + ".")
@@ -1248,10 +1504,9 @@ with tab_ing:
             fecha_entrada_iso = ahora_entrada.isoformat(timespec="seconds")
             rutas = {}
             archivos = [
-                ("frente", foto_frente),
-                ("izquierda", foto_izq),
-                ("derecha", foto_der),
-                ("trasera", foto_tras),
+                (clave_vista, fotos_vehiculo[clave_vista])
+                for clave_vista, _ in VISTAS_VEHICULO
+                if fotos_vehiculo.get(clave_vista)
             ]
             try:
                 for vista, archivo in archivos:
@@ -2627,84 +2882,138 @@ if es_contador:
 # TAB 10: CREDENCIALES Y CÓDIGOS QR INSTITUCIONALES
 # ---------------------------------------------------------------------
 with tab_qrs:
-    st.markdown("""
-    <div class="clubpark-header-card">
-      <div class="clubpark-gold-badge">CATÁLOGO OFICIAL DE ACCESOS Y CREDENCIALES</div>
-      <h3 style="color:#FFFFFF !important;margin:6px 0 2px 0">CÓDIGOS QR OFICIALES DE SUCURSALES Y SUPERVISIÓN</h3>
-      <div style="font-size:13px;color:#EBF3EE">
-        CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V. &nbsp;|&nbsp; Color Institucional: Verde Botella (#0B3B24)
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+    if es_contador:
+        st.markdown(f"""
+        <div class="clubpark-header-card">
+          <div style="text-align:center">{logo_html(250, '6px auto 10px auto')}</div>
+          <div class="clubpark-gold-badge" style="margin-top:4px">CATÁLOGO OFICIAL DE ACCESOS Y CREDENCIALES</div>
+          <h3 style="color:#FFFFFF !important;margin:6px 0 2px 0">CÓDIGOS QR OFICIALES DE SUCURSALES Y SUPERVISIÓN</h3>
+          <div style="font-size:13px;color:#EBF3EE">
+            CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V. &nbsp;|&nbsp; Color Institucional: Verde Botella (#0B3B24)
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.write(
-        "A continuación se presentan todas las credenciales QR para el Contador Auditor, "
-        "los Supervisores Globales y los Encargados de las 23 sucursales operativas. "
-        "Puedes descargar individualmente cada código QR o descargarlos todos juntos en un archivo ZIP."
-    )
+        st.write(
+            "A continuación se presentan todas las credenciales QR para el Contador Auditor, "
+            "los Supervisores Globales y los Encargados de las 23 sucursales operativas. "
+            "Puedes descargar individualmente cada código QR o descargarlos todos juntos en un archivo ZIP."
+        )
 
-    # Botón para descargar el paquete ZIP completo
-    zip_path = Path("/mnt/documents/Credenciales_QR_ClubPark_Completas.zip")
-    if zip_path.exists():
-        with open(zip_path, "rb") as fz:
+        if ACCESOS_FUENTE == "por_defecto":
+            st.warning(
+                "⚠️ **Credenciales en modo contingencia:** los tokens por defecto todavía viven en el código fuente. "
+                "Muévelos a `.streamlit/secrets.toml` (clave `CLUBPARK_TOKENS`) y gírelos de vez en cuando. "
+                "Consulta la guía de implementación adjunta."
+            )
+        else:
+            st.success(
+                "✅ Credenciales protegidas: se cargan desde "
+                + ("Streamlit Secrets" if ACCESOS_FUENTE == "secrets" else "variables de entorno")
+                + " y no están expuestas en el código fuente."
+            )
+
+        # Paquete ZIP completo generado en memoria (sin rutas de máquina de desarrollo)
+        if QR_OK and qrcode:
+            buffer_zip = io.BytesIO()
+            with zipfile.ZipFile(buffer_zip, "w", zipfile.ZIP_DEFLATED) as archivo_zip:
+                for token_zip in ACCESOS:
+                    qr_zip = qrcode.QRCode(version=1, box_size=8, border=2)
+                    qr_zip.add_data(contenido_qr_para(token_zip))
+                    qr_zip.make(fit=True)
+                    imagen_zip = qr_zip.make_image(fill_color="#0B3B24", back_color="#FFFFFF")
+                    buffer_imagen = io.BytesIO()
+                    imagen_zip.save(buffer_imagen, format="PNG")
+                    archivo_zip.writestr(f"QR_{token_zip}.png", buffer_imagen.getvalue())
             st.download_button(
-                "📦 Descargar paquete completo de 26 Códigos QR (ZIP)",
-                data=fz.read(),
+                f"📦 Descargar paquete completo de {len(ACCESOS)} Códigos QR (ZIP)",
+                data=buffer_zip.getvalue(),
                 file_name="Credenciales_QR_ClubPark_Completas.zip",
                 mime="application/zip",
                 use_container_width=True,
                 type="primary",
-                key="descargar_todos_qrs_zip"
+                key="descargar_todos_qrs_zip",
             )
+        if APP_URL:
+            st.info(f"Los QR incluyen el enlace de acceso directo: {APP_URL} — al escanearlos con la cámara del teléfono la sesión se abre sola.")
 
-    filtro_rol = st.radio(
-        "Filtrar catálogo:",
-        ["Todos (26 credenciales)", "Auditoría y Supervisión Global", "Encargados de Sucursal"],
-        horizontal=True,
-        key="filtro_credenciales_qr"
+        filtro_rol = st.radio(
+            "Filtrar catálogo:",
+            ["Todos (26 credenciales)", "Auditoría y Supervisión Global", "Encargados de Sucursal"],
+            horizontal=True,
+            key="filtro_credenciales_qr"
+        )
+
+        # Filtrar tokens
+        tokens_mostrar = {}
+        for tok, data in ACCESOS.items():
+            es_sup = "Global" in data.get("rol", "") or "Auditor" in data.get("rol", "")
+            if filtro_rol == "Auditoría y Supervisión Global" and not es_sup:
+                continue
+            if filtro_rol == "Encargados de Sucursal" and es_sup:
+                continue
+            tokens_mostrar[tok] = data
+
+        cols = st.columns(3)
+        for idx, (tok, data) in enumerate(tokens_mostrar.items()):
+            col = cols[idx % 3]
+            with col:
+                st.markdown(f"""
+                <div style="border:2px solid #0B3B24;border-radius:10px;padding:12px;background:#FFFFFF;margin-bottom:14px;box-shadow:0 3px 8px rgba(11,59,36,0.12)">
+                  <div style="background:#0B3B24;color:#FFFFFF;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;margin-bottom:8px;text-align:center">
+                    {data.get('rol', 'Supervisor')}
+                  </div>
+                  <div style="font-size:14px;font-weight:800;color:#0B3B24;text-align:center">{data.get('nombre', '')}</div>
+                  <div style="font-size:12px;color:#C5A059;font-weight:700;text-align:center;margin-bottom:6px">SUCURSAL: {data.get('sucursal', '')}</div>
+                  <div style="font-family:monospace;font-size:11px;background:#EBF3EE;padding:4px;border-radius:4px;text-align:center;word-break:break-all;color:#072617;margin-bottom:8px">
+                    {tok}
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                if QR_OK and qrcode:
+                    qr_obj = qrcode.QRCode(version=1, box_size=8, border=2)
+                    qr_obj.add_data(contenido_qr_para(tok))
+                    qr_obj.make(fit=True)
+                    img_qr = qr_obj.make_image(fill_color="#0B3B24", back_color="#FFFFFF")
+                    buf_qr = io.BytesIO()
+                    img_qr.save(buf_qr, format="PNG")
+                    qr_bytes = buf_qr.getvalue()
+                    st.image(qr_bytes, width=160)
+                    st.download_button(
+                        label=f"⬇️ Descargar QR",
+                        data=qr_bytes,
+                        file_name=f"QR_{tok}.png",
+                        mime="image/png",
+                        key=f"dl_qr_tab_{tok}",
+                        use_container_width=True
+                    )
+    else:
+        st.error("🔒 Catálogo restringido: solo el Contador Auditor (máxima jerarquía) puede consultar y descargar las credenciales QR oficiales. Pide la rotación y descarga de credenciales al auditor.")
+
+
+# ---------------------------------------------------------------------
+# TAB: PRUEBAS OPERATIVAS
+# ---------------------------------------------------------------------
+with tab_pruebas:
+    st.subheader("Pruebas operativas del sistema")
+    st.caption(
+        "Verifica en segundos que los componentes críticos funcionan antes de abrir la jornada: "
+        "base de datos, folios, códigos QR, boletos térmicos, credenciales, bitácora y fotografías."
     )
+    if st.button("▶️ Ejecutar pruebas operativas", type="primary", use_container_width=True, key="btn_ejecutar_pruebas"):
+        resultados_pruebas = ejecutar_pruebas_operativas()
+        st.session_state["resultados_pruebas"] = resultados_pruebas
+    if st.session_state.get("resultados_pruebas"):
+        resultados_pruebas = st.session_state["resultados_pruebas"]
+        exitos = sum(1 for r in resultados_pruebas if r["estado"] == "✅")
+        col_a, col_b = st.columns(2)
+        col_a.metric("Pruebas aprobadas", f"{exitos}/{len(resultados_pruebas)}")
+        col_b.metric("Estado general", "OPERATIVO ✅" if exitos == len(resultados_pruebas) else "REVISAR ❌")
+        st.dataframe(pd.DataFrame(resultados_pruebas), use_container_width=True, hide_index=True)
+        if exitos == len(resultados_pruebas):
+            st.success("Todas las pruebas operativas pasaron. El sistema está listo para la jornada.")
+        else:
+            st.error("Hay pruebas fallidas. Atiende los detalles antes de operar.")
 
-    # Filtrar tokens
-    tokens_mostrar = {}
-    for tok, data in ACCESOS.items():
-        es_sup = "Global" in data.get("rol", "") or "Auditor" in data.get("rol", "")
-        if filtro_rol == "Auditoría y Supervisión Global" and not es_sup:
-            continue
-        if filtro_rol == "Encargados de Sucursal" and es_sup:
-            continue
-        tokens_mostrar[tok] = data
-
-    cols = st.columns(3)
-    for idx, (tok, data) in enumerate(tokens_mostrar.items()):
-        col = cols[idx % 3]
-        with col:
-            st.markdown(f"""
-            <div style="border:2px solid #0B3B24;border-radius:10px;padding:12px;background:#FFFFFF;margin-bottom:14px;box-shadow:0 3px 8px rgba(11,59,36,0.12)">
-              <div style="background:#0B3B24;color:#FFFFFF;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;margin-bottom:8px;text-align:center">
-                {data.get('rol', 'Supervisor')}
-              </div>
-              <div style="font-size:14px;font-weight:800;color:#0B3B24;text-align:center">{data.get('nombre', '')}</div>
-              <div style="font-size:12px;color:#C5A059;font-weight:700;text-align:center;margin-bottom:6px">SUCURSAL: {data.get('sucursal', '')}</div>
-              <div style="font-family:monospace;font-size:11px;background:#EBF3EE;padding:4px;border-radius:4px;text-align:center;word-break:break-all;color:#072617;margin-bottom:8px">
-                {tok}
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            if QR_OK and qrcode:
-                qr_obj = qrcode.QRCode(version=1, box_size=8, border=2)
-                qr_obj.add_data(tok)
-                qr_obj.make(fit=True)
-                img_qr = qr_obj.make_image(fill_color="#0B3B24", back_color="#FFFFFF")
-                buf_qr = io.BytesIO()
-                img_qr.save(buf_qr, format="PNG")
-                qr_bytes = buf_qr.getvalue()
-                st.image(qr_bytes, width=160)
-                st.download_button(
-                    label=f"⬇️ Descargar QR",
-                    data=qr_bytes,
-                    file_name=f"QR_{tok}.png",
-                    mime="image/png",
-                    key=f"dl_qr_tab_{tok}",
-                    use_container_width=True
-                )
+     
