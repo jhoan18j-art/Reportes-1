@@ -213,6 +213,20 @@ input:focus, textarea:focus {
 """
 st.markdown(CSS_INSTITUCIONAL, unsafe_allow_html=True)
 
+
+def encabezado_institucional(titulo, badge="", subtitulo=""):
+    """Encabezado formal uniforme para todas las pestañas del sistema institucional."""
+    insignia = f'<div class="clubpark-badge" style="margin-top:2px">{badge}</div>' if badge else ""
+    sub = f'<div style="font-size:13px;color:#EBF3EE;margin-top:2px">{subtitulo}</div>' if subtitulo else ""
+    st.markdown(
+        f"""<div class="clubpark-header-card">
+          {insignia}
+          <h3 style="color:#FFFFFF !important;margin:6px 0 2px 0">{titulo}</h3>
+          {sub}
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("CLUBPARK_DATA_DIR", str(BASE_DIR)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -456,8 +470,10 @@ def cargar_auditoria():
 
 
 def guardar_evento_auditoria(tipo, detalle):
+    """Bitácora de auditoría institucional: usuario, rol, fecha, tipo y cambio realizado."""
     eventos = cargar_auditoria()
     eventos.insert(0, {
+        "id_evento": datetime.now().strftime("%Y%m%d%H%M%S") + f"-{len(eventos) + 1:04d}",
         "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "usuario": st.session_state.get("usuario_autenticado", "Sistema"),
         "rol": st.session_state.get("rol", ""),
@@ -468,6 +484,59 @@ def guardar_evento_auditoria(tipo, detalle):
     with temporal.open("w", encoding="utf-8") as f:
         json.dump(eventos, f, ensure_ascii=False, indent=2)
     os.replace(temporal, AUDIT_FILE)
+
+
+ARCHIVO_APRENDIZAJE = DATA_DIR / "aprendizaje_sistema.json"
+
+
+def cargar_aprendizaje():
+    try:
+        datos = json.loads(ARCHIVO_APRENDIZAJE.read_text(encoding="utf-8"))
+        return datos if isinstance(datos, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def evolucion_aprendizaje(registros):
+    """Aprendizaje continuo: el sistema observa su propia operación y documenta su evolución."""
+    notas = cargar_aprendizaje()
+    total = len(registros)
+    if total == 0:
+        return notas
+    hito = (total // 25) * 25
+    ultima_hito = notas[0].get("vehiculos_totales", 0) if notas else 0
+    if hito <= ultima_hito:
+        return notas
+    por_sucursal = {}
+    tarifas = []
+    entregados = 0
+    for registro in registros:
+        clave = registro.get("sucursal", "SIN SUCURSAL") or "SIN SUCURSAL"
+        por_sucursal[clave] = por_sucursal.get(clave, 0) + 1
+        try:
+            tarifas.append(float(registro.get("tarifa", 0) or 0))
+        except (TypeError, ValueError):
+            pass
+        if registro.get("estado") == "Entregado":
+            entregados += 1
+    top = sorted(por_sucursal.items(), key=lambda par: -par[1])[:3]
+    promedio = sum(tarifas) / len(tarifas) if tarifas else 0.0
+    observaciones = (
+        f"El sistema alcanzó {total} vehículos aprendidos. Sucursales con mayor actividad: "
+        + ", ".join(f"{nombre} ({cantidad})" for nombre, cantidad in top)
+        + f". Tarifa promedio ${promedio:,.2f} MXN. {entregados} de {total} vehículos ya entregados "
+        + f"({entregados / total * 100:.0f}%)."
+    )
+    notas.insert(0, {
+        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "vehiculos_totales": total,
+        "observaciones": observaciones,
+    })
+    try:
+        ARCHIVO_APRENDIZAJE.write_text(json.dumps(notas[:60], ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+    return notas
 
 
 CODIGOS_SUCURSAL = {
@@ -506,6 +575,8 @@ ETAPAS_IMPRESION = {
     "ENVIO_ESCPOS": "Fallo de envío ESC/POS: RawBT se abrió pero el binario no llegó a la impresora",
     "IMPRESORA": "Fallo de la impresora: el dato llegó pero no imprimió (papel, energía, cabezal o Bluetooth)",
     "IMPRESION_OK": "Impresión correcta",
+    "INTENTO": "Intento de impresión en espera de confirmación del operador",
+    "REINTENTO": "Reintento de impresión desde la bitácora",
 }
 
 
@@ -518,17 +589,26 @@ def cargar_registro_impresion():
         return []
 
 
-def registrar_evento_impresion(etapa, detalle, resultado="FALLO"):
-    """Guarda un evento de impresión clasificado (conexión, envío ESC/POS o impresora)."""
+def registrar_evento_impresion(etapa, detalle, resultado="FALLO", datos=None):
+    """Guarda un evento de impresión clasificado (conexión, envío ESC/POS o impresora).
+    Con «datos» conserva el binario ESC/POS y el folio para poder reintentar la
+    impresión sin generar cobros, folios ni tickets duplicados."""
     eventos = cargar_registro_impresion()
-    eventos.insert(0, {
+    evento = {
+        "id_impresion": uuid.uuid4().hex[:10],
         "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "usuario": st.session_state.get("usuario_autenticado") or "Sesión local",
         "etapa": etapa,
         "resultado": resultado,
         "diagnóstico": ETAPAS_IMPRESION.get(etapa, "Evento de impresión"),
         "detalle": str(detalle)[:300],
-    })
+    }
+    if datos:
+        evento["folio"] = str(datos.get("folio", "") or "")
+        evento["tipo_documento"] = str(datos.get("tipo_documento", "") or "BOLETO")
+        if datos.get("payload_b64"):
+            evento["payload_b64"] = datos["payload_b64"]
+    eventos.insert(0, evento)
     try:
         ARCHIVO_REGISTRO_IMPRESION.write_text(
             json.dumps(eventos[:300], ensure_ascii=False, indent=2), encoding="utf-8"
@@ -789,15 +869,18 @@ def vista_comprobante_cobro(pago, registro, key="imprimir_comprobante_cobro"):
 
 def imprimir_partes_ticket(registro, sufijo):
     primera, segunda = crear_partes_ticket(registro)
+    folio = registro.get("id", "")
     st.markdown("**Impresión 1: Boleto del cliente**")
     st.code(primera, language="text")
     vista_impresion_con_qr(registro, parte="cliente", key=f"{sufijo}_cliente_directo")
-    imprimir_bluetooth(primera, f"{sufijo}_cliente", qr_payload=qr_payload(registro))
+    imprimir_bluetooth(primera, f"{sufijo}_cliente", qr_payload=qr_payload(registro),
+                       contexto={"folio": folio, "tipo_documento": "BOLETO DEL CLIENTE"})
 
     st.markdown("**Impresión 2: Llavero y contraseña de parabrisas**")
     st.code(segunda, language="text")
     vista_impresion_con_qr(registro, parte="llavero", key=f"{sufijo}_contrasena_directo")
-    imprimir_bluetooth(segunda, f"{sufijo}_contrasena")
+    imprimir_bluetooth(segunda, f"{sufijo}_contrasena",
+                       contexto={"folio": folio, "tipo_documento": "LLAVERO Y CONTRASEÑA"})
 
 
 def construir_payload_escpos(texto, qr_payload_txt=None):
@@ -825,7 +908,7 @@ def construir_payload_escpos(texto, qr_payload_txt=None):
     return bytes(partes)
 
 
-def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
+def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
     """Impresión térmica por Bluetooth: binario ESC/POS completo (texto + QR) para
     impresoras Bluetooth clásico SPP vía RawBT, botón de compartir, y Web Bluetooth BLE."""
     texto_json = json.dumps(str(texto), ensure_ascii=False)
@@ -837,6 +920,21 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
     # llega intacto a la impresora Bluetooth clasica (SPP), incluido el QR.
     payload_b64 = base64.b64encode(payload_binario).decode("ascii")
     texto_b64 = base64.b64encode(str(texto).encode("utf-8")).decode("ascii")
+
+    if contexto:
+        try:
+            registrar_evento_impresion(
+                "INTENTO",
+                f"{contexto.get('tipo_documento', '')} · folio {contexto.get('folio', '—')} · en espera de confirmación del operador",
+                "PENDIENTE",
+                datos={
+                    "folio": str(contexto.get("folio", "")),
+                    "tipo_documento": str(contexto.get("tipo_documento", "")),
+                    "payload_b64": payload_b64,
+                },
+            )
+        except Exception:
+            pass
 
     html_doc = f"""
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border:1px solid #C4D7CC;background:#F9FBF9;border-radius:10px;padding:12px;margin:8px 0">
@@ -1003,7 +1101,8 @@ def panel_prueba_impresion(key_sufijo="diag", expandido=True):
     with st.expander("🧪 Prueba de impresión y registro de errores RawBT", expanded=expandido):
         texto_prueba, qr_prueba = generar_ticket_prueba_impresion()
         st.code(texto_prueba)
-        imprimir_bluetooth(texto_prueba, key_suffix=f"prueba_{key_sufijo}", qr_payload=qr_prueba)
+        imprimir_bluetooth(texto_prueba, key_suffix=f"prueba_{key_sufijo}", qr_payload=qr_prueba,
+                           contexto={"folio": "PRUEBA", "tipo_documento": "TICKET DE PRUEBA DE IMPRESIÓN"})
         st.markdown("**¿Qué resultado obtuviste al pulsar el botón RawBT?**")
         resultado = st.radio(
             "Resultado de la prueba de impresión",
@@ -1042,6 +1141,79 @@ def panel_prueba_impresion(key_sufijo="diag", expandido=True):
         if eventos_log:
             st.markdown("**Bitácora de impresión (últimos 15 eventos)**")
             st.dataframe(pd.DataFrame(eventos_log[:15]), use_container_width=True, hide_index=True)
+
+
+def enviar_payload_guardado(payload_b64, folio, tipo_documento, indice):
+    """Reenvía un binario ESC/POS guardado: mismo folio, sin cobros ni tickets nuevos."""
+    safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", f"reintento_{indice}")
+    html_doc = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border:1px solid #5B8F6E;background:#F4F7F5;border-radius:10px;padding:12px;margin:8px 0">
+      <div style="font-size:12px;color:#2B4A37;margin-bottom:8px"><b>Reintento · {tipo_documento} · folio {folio}</b> — el binario guardado se reenvía sin cambios: no se genera cobro, folio ni ticket nuevo.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="rawbt:base64,{payload_b64}" target="_top" style="flex:1;min-width:220px;text-decoration:none;background:#0B3B24;color:#FFFFFF;padding:12px;border:1px solid #072617;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">🖨️ Reimprimir por Bluetooth (RawBT)</a>
+        <button id="cp_dl_{safe_key}" type="button" style="background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #5B8F6E;border-radius:8px;font-weight:700;cursor:pointer">⬇️ Descargar .bin (abrir con RawBT)</button>
+      </div>
+    </div>
+    <script>
+    (() => {{
+      const btnDl = document.getElementById('cp_dl_{safe_key}');
+      btnDl.addEventListener('click', () => {{
+        try {{
+          const bin = Uint8Array.from(atob('{payload_b64}'), c => c.charCodeAt(0));
+          const blob = new Blob([bin], {{type: 'application/octet-stream'}});
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'reintento_folio_{folio}_escpos.bin';
+          document.body.appendChild(a); a.click(); a.remove();
+        }} catch(e) {{}}
+      }});
+    }})();
+    </script>
+    """
+    st.components.v1.html(html_doc, height=180)
+
+
+def panel_reintentos_impresion(expandido=False, sufijo_panel="panel"):
+    """Reintento de impresión desde la bitácora: mismo folio y mismo binario,
+    sin crear cobros, folios ni tickets duplicados."""
+    eventos = cargar_registro_impresion()
+    reintentables = [e for e in eventos if e.get("payload_b64") and e.get("resultado") != "OK"]
+    with st.expander("🔄 Reintento de impresiones fallidas (desde la bitácora)", expanded=expandido):
+        if not reintentables:
+            st.success("Sin impresiones pendientes de reintento.")
+            return
+        st.caption(
+            "Cada reintento reenvía el binario ESC/POS guardado con el mismo folio. "
+            "No se crean cobros, folios ni tickets nuevos. Cuando salga el papel, marca el evento como impreso."
+        )
+        for indice, evento in enumerate(reintentables[:8]):
+            # Llave estable: depende solo del id del evento, nunca del orden de la lista ni de la corrida,
+            # para que el clic no se pierda cuando la bitácora crece entre corridas.
+            llave = f"reintento_{sufijo_panel}_{evento.get('id_impresion') or re.sub(r'[^0-9]', '', str(evento.get('fecha_hora', '')))}"
+            with st.container(border=True):
+                st.markdown(
+                    f"**{evento.get('tipo_documento', 'BOLETO')} · folio {evento.get('folio', '—')} · "
+                    f"{evento.get('fecha_hora', '')} · {evento.get('etapa', '')}**"
+                )
+                st.caption(f"Registrado por {evento.get('usuario', '—')} · {evento.get('diagnóstico', '')}")
+                col_r1, col_r2 = st.columns(2)
+                if col_r1.button("🔄 Reintentar impresión", key=f"reintento_enviar_{llave}", use_container_width=True, type="primary"):
+                    enviar_payload_guardado(evento["payload_b64"], evento.get("folio", "—"), evento.get("tipo_documento", "BOLETO"), llave)
+                    registrar_evento_impresion(
+                        "REINTENTO",
+                        f"Reenvío del binario guardado · folio {evento.get('folio', '—')}",
+                        "PENDIENTE",
+                        datos={"folio": evento.get("folio", ""), "tipo_documento": evento.get("tipo_documento", "BOLETO")},
+                    )
+                    st.success("Binario listo: pulsa «🖨️ Reimprimir por Bluetooth (RawBT)» del recuadro verde.")
+                if col_r2.button("✅ Marcar como impreso", key=f"reintento_ok_{llave}", use_container_width=True):
+                    registrar_evento_impresion(
+                        "IMPRESION_OK",
+                        f"Confirmado por el operador tras reintento · folio {evento.get('folio', '—')}",
+                        "OK",
+                        datos={"folio": evento.get("folio", ""), "tipo_documento": evento.get("tipo_documento", "BOLETO")},
+                    )
+                    st.rerun()
 
 
 def dinero(valor):
@@ -1747,7 +1919,7 @@ tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cie
 # TAB 1: INGRESO
 # ---------------------------------------------------------------------
 with tab_ing:
-    st.subheader("1. Datos del vehículo y recepción")
+    encabezado_institucional("REGISTRO DE INGRESO DE VEHÍCULO", "OPERACIÓN 1 · RECEPCIÓN", "Protocolo institucional de recepción con evidencia fotográfica obligatoria")
     c1, c2 = st.columns(2)
     with c1:
         if es_global:
@@ -1912,6 +2084,10 @@ with tab_ing:
                 if guardar_bd(st.session_state.vehiculos):
                     st.session_state.ultimo_ticket = registro["ticket_texto"]
                     st.session_state.ultimo_folio = folio
+                    guardar_evento_auditoria(
+                        "ALTA DE VEHICULO",
+                        f"Folio {folio} · {sucursal} · {marca} placas {placas} · ${tarifa:,.2f} · operador {operador or 'no indicado'}",
+                    )
                     st.success(f"Ingreso registrado. Folio: {folio}")
                     st.rerun()
             except Exception as exc:
@@ -1946,7 +2122,7 @@ with tab_ing:
 # TAB 2: VEHÍCULOS REGISTRADOS
 # ---------------------------------------------------------------------
 with tab_list:
-    st.subheader("Vehículos registrados")
+    encabezado_institucional("VEHÍCULOS REGISTRADOS", "CONTROL DE RESGUARDO", "Consulta, seguimiento y estado de cada vehículo bajo resguardo")
     visibles = vehiculos_visibles(st.session_state.vehiculos)
     if not visibles:
         st.info("No hay vehículos registrados para tu alcance.")
@@ -1993,19 +2169,6 @@ with tab_list:
                         if p_extra.exists():
                             st.image(str(p_extra), caption=f"Pertenencia {i + 1}", use_container_width=True)
                         else:
-                            st.warning("Foto no disponible")
-            fotos_custodia_detalle = detalle.get("fotos_custodia", []) or []
-            if fotos_custodia_detalle:
-                st.markdown("**📷 Evidencia fotográfica de pertenencias**")
-                cols_custodia = st.columns(min(3, len(fotos_custodia_detalle)))
-                for i, ruta_extra in enumerate(fotos_custodia_detalle):
-                    p_extra = Path(ruta_extra)
-                    if not p_extra.is_absolute():
-                        p_extra = DATA_DIR / p_extra
-                    with cols_custodia[i % len(cols_custodia)]:
-                        if p_extra.exists():
-                            st.image(str(p_extra), caption=f"Pertenencia {i + 1}", use_container_width=True)
-                        else:
                             st.warning(f"Foto de pertenencia {i + 1} no disponible")
 
             if es_global:
@@ -2034,7 +2197,7 @@ with tab_list:
 # TAB: SALIDA Y COBRO
 # ---------------------------------------------------------------------
 with tab_salida:
-    st.subheader("Salida de vehículo y registro de cobro")
+    encabezado_institucional("SALIDA DE VEHÍCULO Y REGISTRO DE COBRO", "OPERACIÓN 2 · ENTREGA", "Cobro verificado, comprobante oficial y entrega del vehículo")
     st.caption("Escanea el QR único del boleto o captura el folio. La salida solo se registra una vez.")
     metodo_busqueda = st.radio(
         "Cómo localizar el vehículo",
@@ -2179,26 +2342,46 @@ with tab_salida:
         )
         pago_reciente = comprobante_reciente.get("pago", {})
         registro_reciente = comprobante_reciente.get("registro", {})
+        registro_completo_reciente = next(
+            (r for r in vehiculos_visibles(st.session_state.vehiculos) if r.get("id") == registro_reciente.get("id")),
+            {},
+        ) or {}
         texto_comprobante = "\n".join([
-            "CLUB PARK",
-            "VALET Y ESTACIONAMIENTOS S.A. DE C.V.",
-            "COMPROBANTE DE COBRO",
+            "       TICKET DE SALIDA",
+            f"N° {registro_reciente.get('id', '')}",
+            "RUT: CPV-ESTACIONAMIENTOS",
+            "CLUB PARK VALET Y",
+            "ESTACIONAMIENTOS",
+            "--------------------------------",
+            f"Placa: {registro_reciente.get('placas', '')}",
+            f"Ubicacion: {registro_reciente.get('sucursal', '')}",
+            f"Ingreso: {registro_completo_reciente.get('fecha_entrada') or registro_completo_reciente.get('fecha', '') or pago_reciente.get('fecha_hora', '')}",
+            f"Pago: {pago_reciente.get('fecha_hora', '')}",
+            f"Operador: {pago_reciente.get('usuario', '')}",
             "--------------------------------",
             f"Sucursal: {registro_reciente.get('sucursal', '')}",
             f"Folio: {registro_reciente.get('id', '')}",
             f"Vehiculo: {registro_reciente.get('marca', '')} {registro_reciente.get('placas', '')}",
             f"Fecha: {pago_reciente.get('fecha_hora', '')}",
-            f"Importe: ${dinero(pago_reciente.get('importe')):,.2f} MXN",
+            f"Total: ${dinero(pago_reciente.get('importe')):,.2f}",
+            "SALDO PENDIENTE: $0.00",
+            "--------------------------------",
             f"Metodo: {pago_reciente.get('metodo', '')}",
             f"Estado: {pago_reciente.get('estado', '')}",
             f"Referencia: {pago_reciente.get('referencia', '') or 'No aplica'}",
             f"Atendio: {pago_reciente.get('usuario', '')}",
             "--------------------------------",
-            "Conserve este comprobante.",
+            "BIENVENIDO. Primera hora $25.00.",
+            "A partir de la segunda hora, aplican",
+            "tarifas por fraccion: 15 min $10.00",
+            "los primeros 15, posteriores $5.00.",
+            "Factura: facturacionclubpark@gmail.com",
+            "Conserve este ticket.",
             "Gracias por su preferencia.",
         ])
         st.markdown("**Impresión térmica Bluetooth del comprobante**")
-        imprimir_bluetooth(texto_comprobante, f"comprobante_{registro_reciente.get('id', 'reciente')}")
+        imprimir_bluetooth(texto_comprobante, f"comprobante_{registro_reciente.get('id', 'reciente')}",
+                           contexto={"folio": registro_reciente.get('id', ''), "tipo_documento": "TICKET DE SALIDA"})
         st.download_button(
             "⬇️ Descargar comprobante en texto",
             data="CLUB PARK\nCOMPROBANTE DE COBRO\n" + "\n".join(
@@ -2222,7 +2405,7 @@ with tab_salida:
 # TAB: BALANCES Y RENTABILIDAD POR SUCURSAL
 # ---------------------------------------------------------------------
 with tab_balance:
-    st.subheader("Balances operativos y rentabilidad por sucursal")
+    encabezado_institucional("BALANCES OPERATIVOS Y RENTABILIDAD", "FINANZAS", "Rentabilidad por sucursal, gastos operativos y tendencias")
     st.caption(
         "El conteo de vehículos y los ingresos se calculan desde los registros. "
         "La rentabilidad usa los gastos operativos capturados por el supervisor o auditor."
@@ -2440,7 +2623,7 @@ with tab_balance:
 # TAB: CORTES DE CAJA
 # ---------------------------------------------------------------------
 with tab_corte:
-    st.subheader("Corte de caja")
+    encabezado_institucional("CORTE DE CAJA", "CONTROL DE EFECTIVO", "Conciliación de cobros en efectivo por sucursal y fecha")
     st.caption("Los totales se calculan con salidas registradas y pagos confirmados. Pagos QR/tarjeta no confirmados no se suman a lo cobrado.")
     registros_entregados = [
         r for r in vehiculos_visibles(st.session_state.vehiculos)
@@ -2532,7 +2715,7 @@ with tab_corte:
 # CIERRE DIARIO POR SUCURSAL
 # ---------------------------------------------------------------------
 with tab_cierre_diario:
-    st.subheader("Reporte diario de cierre por sucursal")
+    encabezado_institucional("REPORTE DIARIO DE CIERRE POR SUCURSAL", "CIERRE OPERATIVO", "Balance formal del día: ingresos, gastos y resultado por sucursal")
     st.caption(
         "Captura y entrega el balance diario de boletos, cobros y gastos. "
         "Cada sucursal puede guardar un cierre por fecha; el contador puede consultar todas."
@@ -2838,8 +3021,9 @@ with tab_cierre_diario:
 # TAB 3: REIMPRESIÓN
 # ---------------------------------------------------------------------
 with tab_imp:
-    st.subheader("Re-impresión de tickets")
+    encabezado_institucional("RE-IMPRESIÓN TÉRMICA DE TICKETS", "IMPRESIÓN ESC/POS", "Reemisión de boletos y llaveros con el folio original")
     panel_prueba_impresion(key_sufijo="reimpresion", expandido=False)
+    panel_reintentos_impresion(expandido=True, sufijo_panel="reimp")
     visibles = vehiculos_visibles(st.session_state.vehiculos)
     if not visibles:
         st.info("No hay tickets disponibles.")
@@ -2879,7 +3063,7 @@ with tab_imp:
 # TAB 4: REPORTES Y EXCEL
 # ---------------------------------------------------------------------
 with tab_rep:
-    st.subheader("Reporte operativo y descarga Excel")
+    encabezado_institucional("REPORTE OPERATIVO Y EXCEL OFICIAL", "DOCUMENTACIÓN", "Exportación institucional para dirección y contaduría")
     visibles = vehiculos_visibles(st.session_state.vehiculos)
     if not visibles:
         st.info("No hay registros para generar un reporte.")
@@ -2925,7 +3109,7 @@ with tab_rep:
 # TAB 5: AUDITORÍA Y WHATSAPP
 # ---------------------------------------------------------------------
 with tab_aud:
-    st.subheader("Auditoría y comunicación")
+    encabezado_institucional("AUDITORÍA Y COMUNICACIÓN", "GOBIERNO DEL SISTEMA", "Bitácora de altas, cobros, salidas y cierres con usuario y fecha")
     visibles = vehiculos_visibles(st.session_state.vehiculos)
     total = len(visibles)
     entregados = sum(1 for r in visibles if r.get("estado") == "Entregado")
@@ -3259,11 +3443,36 @@ st.sidebar.caption(
 if es_contador:
     st.divider()
     st.subheader("Historial de auditoría del sistema")
+    st.caption(
+        "Bitácora institucional: registra altas, cobros, salidas, cierres, cambios de folio e impresión, "
+        "con usuario, rol, fecha y detalle del cambio."
+    )
     eventos = cargar_auditoria()
     if eventos:
-        st.dataframe(pd.DataFrame(eventos), use_container_width=True, hide_index=True)
+        col_f1, col_f2, col_f3 = st.columns(3)
+        tipos = ["Todos"] + sorted({str(e.get("tipo", "OTRO")) for e in eventos})
+        usuarios = ["Todos"] + sorted({str(e.get("usuario", "Sistema")) for e in eventos})
+        filtro_tipo = col_f1.selectbox("Filtrar por evento", tipos, key="aud_filtro_tipo")
+        filtro_usuario = col_f2.selectbox("Filtrar por usuario", usuarios, key="aud_filtro_usuario")
+        busqueda = col_f3.text_input("Buscar en el detalle", key="aud_busqueda").strip().lower()
+        eventos_filtrados = eventos
+        if filtro_tipo != "Todos":
+            eventos_filtrados = [e for e in eventos_filtrados if str(e.get("tipo", "OTRO")) == filtro_tipo]
+        if filtro_usuario != "Todos":
+            eventos_filtrados = [e for e in eventos_filtrados if str(e.get("usuario", "Sistema")) == filtro_usuario]
+        if busqueda:
+            eventos_filtrados = [e for e in eventos_filtrados if busqueda in json.dumps(e, ensure_ascii=False).lower()]
+        st.metric("Eventos en la bitácora", len(eventos_filtrados))
+        st.dataframe(pd.DataFrame(eventos_filtrados), use_container_width=True, hide_index=True)
+        st.download_button(
+            "📥 Descargar bitácora de auditoría (CSV)",
+            data=pd.DataFrame(eventos_filtrados).to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"Bitacora_Auditoria_ClubPark_{datetime.now():%Y%m%d_%H%M}.csv",
+            mime="text/csv",
+            key="descargar_bitacora_auditoria",
+        )
     else:
-        st.info("Los cambios de folios, salidas y cortes aparecerán aquí.")
+        st.info("La bitácora registrará aquí altas, cobros, salidas, cierres y cambios de folios.")
 
 
 # ---------------------------------------------------------------------
@@ -3383,12 +3592,13 @@ with tab_qrs:
 # TAB: PRUEBAS OPERATIVAS
 # ---------------------------------------------------------------------
 with tab_pruebas:
-    st.subheader("Pruebas operativas del sistema")
+    encabezado_institucional("PRUEBAS OPERATIVAS DEL SISTEMA", "VERIFICACIÓN PREVIA", "Verificación formal de componentes críticos antes de abrir la jornada")
     st.caption(
         "Verifica en segundos que los componentes críticos funcionan antes de abrir la jornada: "
         "base de datos, folios, códigos QR, boletos térmicos, credenciales, bitácora y fotografías."
     )
     panel_prueba_impresion(key_sufijo="pruebas", expandido=False)
+    panel_reintentos_impresion(expandido=False, sufijo_panel="pruebas")
     if st.button("▶️ Ejecutar pruebas operativas", type="primary", use_container_width=True, key="btn_ejecutar_pruebas"):
         resultados_pruebas = ejecutar_pruebas_operativas()
         st.session_state["resultados_pruebas"] = resultados_pruebas
@@ -3406,7 +3616,7 @@ with tab_pruebas:
 
 
 with tab_intel:
-    st.subheader("Inteligencia Operativa")
+    encabezado_institucional("INTELIGENCIA OPERATIVA", "ANÁLISIS CONTINUO", "El sistema se observa a sí mismo: indicadores, alertas, recomendaciones y evolución")
     st.caption(
         "Panel ejecutivo que se actualiza automáticamente con cada operación registrada: "
         "indicadores, alertas tempranas, resumen del día y recomendaciones generadas a partir "
@@ -3434,6 +3644,14 @@ with tab_intel:
         st.markdown("**Recomendaciones automáticas**")
         for recomendacion in recomendaciones:
             st.markdown(f"- {recomendacion}")
+
+        st.markdown("**Evolución del sistema (aprendizaje continuo)**")
+        notas_evolucion = evolucion_aprendizaje(registros_intel)
+        if notas_evolucion:
+            for nota in notas_evolucion[:5]:
+                st.markdown(f"- **{nota['fecha']}** · {nota['vehiculos_totales']} vehículos: {nota['observaciones']}")
+        else:
+            st.caption("Cada 25 vehículos registrados, el sistema documentará aquí lo que ha aprendido de la operación.")
 
     st.markdown("**Salud de la impresión térmica (RawBT)**")
     eventos_imp = cargar_registro_impresion()
