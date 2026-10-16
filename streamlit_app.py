@@ -2875,10 +2875,12 @@ with tab_aud:
     c1, c2, c3 = st.columns(3)
     with c1:
         fecha_precio = st.number_input(
-            "Costo unitario del boleto ($)", min_value=0.0,
-            value=float(PRECIOS_SUCURSALES.get(sucursal_cierre, 0)), step=5.0,
-            key=f"cierre_precio_{clave_widget_cierre}"
-        )
+    "Costo unitario del boleto ($)",
+    min_value=0.0,
+    value=float(PRECIOS_SUCURSALES.get(sucursal_cierre, 0)),
+    step=5.0,
+    key=f"contador_cierre_precio_{clave_widget_cierre}"
+)
         folio_inicial = st.text_input(
             "Folio inicial de la sesión", value=folio_inicial_default,
             key=f"cierre_folio_ini_{clave_widget_cierre}"
