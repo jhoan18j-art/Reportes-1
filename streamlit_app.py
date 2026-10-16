@@ -68,9 +68,9 @@ CSS_INSTITUCIONAL = """
 /* Paleta Institucional Club Park: BLANCO Oficial */
 :root {
   --cpv-verde-botella: #0B3B24;
-  --cpv-verde-oscuro: #072617;
+  --cpv-blanco-oscuro: #072617;
   --cpv-verde-medio: #145A32;
-  --cpv-verde-claro: #EBF3EE;
+  --cpv-blanco-claro: #EBF3EE;
   --cpv-dorado-oficial: #C5A059;
   --cpv-dorado-brillante: #D4AF37;
   --cpv-fondo-suave: #F4F7F5;
