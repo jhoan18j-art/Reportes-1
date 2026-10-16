@@ -71,8 +71,8 @@ CSS_INSTITUCIONAL = """
   --cpv-verde-oscuro: #072617;
   --cpv-verde-medio: #145A32;
   --cpv-verde-claro: #EBF3EE;
-  --cpv-dorado-oficial: #5B8F6E;
-  --cpv-dorado-brillante: #7FA98C;
+  --cpv-dorado-oficial: #C5A059;
+  --cpv-dorado-brillante: #D4AF37;
   --cpv-fondo-suave: #F4F7F5;
   --cpv-texto-principal: #1A2B20;
 }
@@ -137,17 +137,17 @@ div[data-testid="stAlert"] {
 /* Banners institucionales */
 .clubpark-header-card {
   background: linear-gradient(135deg, #072617 0%, #0B3B24 65%, #145A32 100%);
-  border: 2px solid #5B8F6E;
+  border: 2px solid #C5A059;
   border-radius: 12px;
   padding: 20px 24px;
   color: #FFFFFF;
   margin-bottom: 20px;
   box-shadow: 0 4px 14px rgba(11, 59, 36, 0.25);
 }
-.clubpark-badge {
-  background: rgba(46, 107, 71, 0.30);
-  border: 1px solid #5B8F6E;
-  color: #E8F3EC;
+.clubpark-gold-badge {
+  background: rgba(197, 160, 89, 0.18);
+  border: 1px solid #C5A059;
+  color: #F7E7CE;
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 12px;
@@ -167,14 +167,14 @@ h3 { font-size: 1.12rem !important; }
 /* Barra lateral institucional en verde botella */
 section[data-testid="stSidebar"] {
   background: linear-gradient(180deg, #072617 0%, #0B3B24 70%, #145A32 100%);
-  border-right: 2px solid #5B8F6E;
+  border-right: 2px solid #C5A059;
 }
 section[data-testid="stSidebar"] * { color: #F4F7F5 !important; }
 section[data-testid="stSidebar"] button[kind="primary"],
 section[data-testid="stSidebar"] button[kind="secondary"],
 section[data-testid="stSidebar"] .stButton > button {
   background-color: #F4F7F5 !important; color: #0B3B24 !important;
-  border: 1px solid #5B8F6E !important; font-weight: 700 !important;
+  border: 1px solid #C5A059 !important; font-weight: 700 !important;
 }
 section[data-testid="stSidebar"] .stButton > button:hover {
   background-color: #EBF3EE !important;
@@ -183,7 +183,7 @@ section[data-testid="stSidebar"] .stButton > button:hover {
 div[data-testid="stMetric"] {
   background: #FFFFFF;
   border: 1px solid #C4D7CC;
-  border-left: 3px solid #5B8F6E;
+  border-left: 3px solid #C5A059;
   border-radius: 10px;
   padding: 10px 14px;
   box-shadow: 0 1px 4px rgba(11, 59, 36, 0.10);
@@ -196,7 +196,7 @@ div[data-testid="stExpander"] {
 }
 /* Pestaña activa con subrayado dorado */
 button[data-baseweb="tab"][aria-selected="true"] {
-  box-shadow: inset 0 -3px 0 #5B8F6E;
+  box-shadow: inset 0 -3px 0 #C5A059;
 }
 /* Entradas de texto con borde institucional */
 input, textarea, div[data-baseweb="select"] > div {
@@ -208,23 +208,32 @@ input:focus, textarea:focus {
   box-shadow: 0 0 0 1px #0B3B24 !important;
 }
 /* Regla dorada institucional */
-.clubpark-gold-rule { border: 0; border-top: 2px solid #5B8F6E; margin: 12px 0; }
+.clubpark-gold-rule { border: 0; border-top: 2px solid #C5A059; margin: 12px 0; }
 </style>
 """
 st.markdown(CSS_INSTITUCIONAL, unsafe_allow_html=True)
 
-
-def encabezado_institucional(titulo, badge="", subtitulo=""):
-    """Encabezado formal uniforme para todas las pestañas del sistema institucional."""
-    insignia = f'<div class="clubpark-badge" style="margin-top:2px">{badge}</div>' if badge else ""
-    sub = f'<div style="font-size:13px;color:#EBF3EE;margin-top:2px">{subtitulo}</div>' if subtitulo else ""
-    st.markdown(
-        f"""<div class="clubpark-header-card">
-          {insignia}
-          <h3 style="color:#FFFFFF !important;margin:6px 0 2px 0">{titulo}</h3>
-          {sub}
-        </div>""",
-        unsafe_allow_html=True,
+# ---------------------------------------------------------------------
+# LOGOTIPO INSTITUCIONAL DE CLUB PARK (embebido, fondo transparente)
+# ---------------------------------------------------------------------
+LOGO_CLUBPARK_B64 = "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
+def logo_clubpark_html(ancho=170, margen="0 auto 10px auto", sombra=True, fondo=None):
+    sombra_css = "filter:drop-shadow(0 2px 5px rgba(0,0,0,0.35));" if sombra else ""
+    if fondo:
+        envoltura = (
+            'background:' + fondo + ';border:1px solid #C5A059;border-radius:12px;'
+            'padding:10px 18px;display:inline-block;'
+        )
+    else:
+        envoltura = ""
+    return (
+        '<div style="text-align:center;margin:' + margen + '">'
+        '<span style="' + envoltura + '">'
+        '<img alt="Logotipo oficial CLUB PARK VALET Y ESTACIONAMIENTOS" '
+        'src="data:image/png;base64,' + LOGO_CLUBPARK_B64 + '" '
+        'style="width:' + str(ancho) + 'px;max-width:92%;height:auto;display:inline-block;' + sombra_css + '">'
+        '</span>'
+        '</div>'
     )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -232,19 +241,35 @@ DATA_DIR = Path(os.environ.get("CLUBPARK_DATA_DIR", str(BASE_DIR)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PHOTO_DIR = DATA_DIR / "fotos_vehiculos"
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+def obtener_dir_componente():
+    candidatos = [
+        BASE_DIR / "clubpark_component",
+        BASE_DIR,
+        DATA_DIR / "clubpark_component",
+        DATA_DIR,
+    ]
+    for c in candidatos:
+        if (c / "index.html").exists():
+            return c
+    # Si no existe, crear la carpeta clubpark_component
+    destino = BASE_DIR / "clubpark_component"
+    destino.mkdir(parents=True, exist_ok=True)
+    if (BASE_DIR / "index.html").exists():
+        import shutil
+        shutil.copy(BASE_DIR / "index.html", destino / "index.html")
+    return destino
+
+DIR_COMPONENTE = obtener_dir_componente()
+try:
+    CAMARA_COMPONENT = st.components.v1.declare_component(
+        "clubpark_camara_trasera", path=str(DIR_COMPONENTE)
+    )
+except Exception:
+    CAMARA_COMPONENT = None
 DB_FILE = DATA_DIR / "vehiculos_produccion_db.json"
 CONFIG_FILE = DATA_DIR / "config_operativa.json"
 AUDIT_FILE = DATA_DIR / "auditoria_operativa.json"
 PAYMENTS_FILE = DATA_DIR / "pagos_registrados.json"
-
-# Contador de llaves por ejecución: evita StreamlitDuplicateElementKey aunque una
-# sección se renderice dos veces en la misma corrida (el contador se reinicia en cada ejecución del script).
-_CONTADOR_LLAVES = 0
-
-def llave_unica(base):
-    global _CONTADOR_LLAVES
-    _CONTADOR_LLAVES += 1
-    return f"{base}__{_CONTADOR_LLAVES}"
 
 PRECIOS_SUCURSALES = {
     "PAMPAS INSURGENTES": 50,
@@ -470,10 +495,8 @@ def cargar_auditoria():
 
 
 def guardar_evento_auditoria(tipo, detalle):
-    """Bitácora de auditoría institucional: usuario, rol, fecha, tipo y cambio realizado."""
     eventos = cargar_auditoria()
     eventos.insert(0, {
-        "id_evento": datetime.now().strftime("%Y%m%d%H%M%S") + f"-{len(eventos) + 1:04d}",
         "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "usuario": st.session_state.get("usuario_autenticado", "Sistema"),
         "rol": st.session_state.get("rol", ""),
@@ -484,59 +507,6 @@ def guardar_evento_auditoria(tipo, detalle):
     with temporal.open("w", encoding="utf-8") as f:
         json.dump(eventos, f, ensure_ascii=False, indent=2)
     os.replace(temporal, AUDIT_FILE)
-
-
-ARCHIVO_APRENDIZAJE = DATA_DIR / "aprendizaje_sistema.json"
-
-
-def cargar_aprendizaje():
-    try:
-        datos = json.loads(ARCHIVO_APRENDIZAJE.read_text(encoding="utf-8"))
-        return datos if isinstance(datos, list) else []
-    except (OSError, json.JSONDecodeError):
-        return []
-
-
-def evolucion_aprendizaje(registros):
-    """Aprendizaje continuo: el sistema observa su propia operación y documenta su evolución."""
-    notas = cargar_aprendizaje()
-    total = len(registros)
-    if total == 0:
-        return notas
-    hito = (total // 25) * 25
-    ultima_hito = notas[0].get("vehiculos_totales", 0) if notas else 0
-    if hito <= ultima_hito:
-        return notas
-    por_sucursal = {}
-    tarifas = []
-    entregados = 0
-    for registro in registros:
-        clave = registro.get("sucursal", "SIN SUCURSAL") or "SIN SUCURSAL"
-        por_sucursal[clave] = por_sucursal.get(clave, 0) + 1
-        try:
-            tarifas.append(float(registro.get("tarifa", 0) or 0))
-        except (TypeError, ValueError):
-            pass
-        if registro.get("estado") == "Entregado":
-            entregados += 1
-    top = sorted(por_sucursal.items(), key=lambda par: -par[1])[:3]
-    promedio = sum(tarifas) / len(tarifas) if tarifas else 0.0
-    observaciones = (
-        f"El sistema alcanzó {total} vehículos aprendidos. Sucursales con mayor actividad: "
-        + ", ".join(f"{nombre} ({cantidad})" for nombre, cantidad in top)
-        + f". Tarifa promedio ${promedio:,.2f} MXN. {entregados} de {total} vehículos ya entregados "
-        + f"({entregados / total * 100:.0f}%)."
-    )
-    notas.insert(0, {
-        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "vehiculos_totales": total,
-        "observaciones": observaciones,
-    })
-    try:
-        ARCHIVO_APRENDIZAJE.write_text(json.dumps(notas[:60], ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError:
-        pass
-    return notas
 
 
 CODIGOS_SUCURSAL = {
@@ -564,58 +534,6 @@ CODIGOS_SUCURSAL = {
     "E-BNI": "EBN",
     "CHURRASQUERIA": "CHUR",
 }
-
-
-# ---------------------------------------------------------------------
-# REGISTRO DE ERRORES DE IMPRESIÓN (RawBT / ESC-POS)
-# ---------------------------------------------------------------------
-ARCHIVO_REGISTRO_IMPRESION = DATA_DIR / "registro_impresion.json"
-ETAPAS_IMPRESION = {
-    "CONEXION": "Fallo de conexión: RawBT no se abrió o no hay impresora emparejada/configurada",
-    "ENVIO_ESCPOS": "Fallo de envío ESC/POS: RawBT se abrió pero el binario no llegó a la impresora",
-    "IMPRESORA": "Fallo de la impresora: el dato llegó pero no imprimió (papel, energía, cabezal o Bluetooth)",
-    "IMPRESION_OK": "Impresión correcta",
-    "INTENTO": "Intento de impresión en espera de confirmación del operador",
-    "REINTENTO": "Reintento de impresión desde la bitácora",
-}
-
-
-def cargar_registro_impresion():
-    """Lee la bitácora de impresión (lista de eventos, más recientes primero)."""
-    try:
-        datos = json.loads(ARCHIVO_REGISTRO_IMPRESION.read_text(encoding="utf-8"))
-        return datos if isinstance(datos, list) else []
-    except (OSError, json.JSONDecodeError):
-        return []
-
-
-def registrar_evento_impresion(etapa, detalle, resultado="FALLO", datos=None):
-    """Guarda un evento de impresión clasificado (conexión, envío ESC/POS o impresora).
-    Con «datos» conserva el binario ESC/POS y el folio para poder reintentar la
-    impresión sin generar cobros, folios ni tickets duplicados."""
-    eventos = cargar_registro_impresion()
-    evento = {
-        "id_impresion": uuid.uuid4().hex[:10],
-        "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "usuario": st.session_state.get("usuario_autenticado") or "Sesión local",
-        "etapa": etapa,
-        "resultado": resultado,
-        "diagnóstico": ETAPAS_IMPRESION.get(etapa, "Evento de impresión"),
-        "detalle": str(detalle)[:300],
-    }
-    if datos:
-        evento["folio"] = str(datos.get("folio", "") or "")
-        evento["tipo_documento"] = str(datos.get("tipo_documento", "") or "BOLETO")
-        if datos.get("payload_b64"):
-            evento["payload_b64"] = datos["payload_b64"]
-    eventos.insert(0, evento)
-    try:
-        ARCHIVO_REGISTRO_IMPRESION.write_text(
-            json.dumps(eventos[:300], ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except OSError:
-        pass
-    return eventos[:300]
 
 
 def codigo_sucursal(sucursal):
@@ -738,7 +656,7 @@ def vista_impresion_con_qr(registro, parte="cliente", key="print_qr"):
           🖨️ Imprimir {titulo_btn}
         </button>
         <!-- Botón 2: Enlace directo RawBT para impresoras Bluetooth Android -->
-        <a href="{rawbt_url}" target="_top" style="text-decoration:none;padding:10px 14px;font-weight:700;border:1px solid #5B8F6E;border-radius:8px;background:#FAF8F5;color:#0B3B24;display:inline-flex;align-items:center;gap:6px;font-size:13px">
+        <a href="{rawbt_url}" target="_top" style="text-decoration:none;padding:10px 14px;font-weight:700;border:1px solid #C5A059;border-radius:8px;background:#FAF8F5;color:#0B3B24;display:inline-flex;align-items:center;gap:6px;font-size:13px">
           📱 Enviar a Mini Impresora Bluetooth (Android)
         </a>
       </div>
@@ -869,18 +787,15 @@ def vista_comprobante_cobro(pago, registro, key="imprimir_comprobante_cobro"):
 
 def imprimir_partes_ticket(registro, sufijo):
     primera, segunda = crear_partes_ticket(registro)
-    folio = registro.get("id", "")
     st.markdown("**Impresión 1: Boleto del cliente**")
     st.code(primera, language="text")
     vista_impresion_con_qr(registro, parte="cliente", key=f"{sufijo}_cliente_directo")
-    imprimir_bluetooth(primera, f"{sufijo}_cliente", qr_payload=qr_payload(registro),
-                       contexto={"folio": folio, "tipo_documento": "BOLETO DEL CLIENTE"})
+    imprimir_bluetooth(primera, f"{sufijo}_cliente", qr_payload=qr_payload(registro))
 
     st.markdown("**Impresión 2: Llavero y contraseña de parabrisas**")
     st.code(segunda, language="text")
     vista_impresion_con_qr(registro, parte="llavero", key=f"{sufijo}_contrasena_directo")
-    imprimir_bluetooth(segunda, f"{sufijo}_contrasena",
-                       contexto={"folio": folio, "tipo_documento": "LLAVERO Y CONTRASEÑA"})
+    imprimir_bluetooth(segunda, f"{sufijo}_contrasena")
 
 
 def construir_payload_escpos(texto, qr_payload_txt=None):
@@ -908,7 +823,7 @@ def construir_payload_escpos(texto, qr_payload_txt=None):
     return bytes(partes)
 
 
-def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
+def imprimir_bluetooth(texto, key_suffix, qr_payload=None):
     """Impresión térmica por Bluetooth: binario ESC/POS completo (texto + QR) para
     impresoras Bluetooth clásico SPP vía RawBT, botón de compartir, y Web Bluetooth BLE."""
     texto_json = json.dumps(str(texto), ensure_ascii=False)
@@ -916,39 +831,22 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
     safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", str(key_suffix))
 
     payload_binario = construir_payload_escpos(texto, qr_payload)
-    # Formato oficial RawBT: "rawbt:base64,<datos>" (sin MIME). El binario ESC/POS
-    # llega intacto a la impresora Bluetooth clasica (SPP), incluido el QR.
     payload_b64 = base64.b64encode(payload_binario).decode("ascii")
     texto_b64 = base64.b64encode(str(texto).encode("utf-8")).decode("ascii")
-
-    if contexto:
-        try:
-            registrar_evento_impresion(
-                "INTENTO",
-                f"{contexto.get('tipo_documento', '')} · folio {contexto.get('folio', '—')} · en espera de confirmación del operador",
-                "PENDIENTE",
-                datos={
-                    "folio": str(contexto.get("folio", "")),
-                    "tipo_documento": str(contexto.get("tipo_documento", "")),
-                    "payload_b64": payload_b64,
-                },
-            )
-        except Exception:
-            pass
 
     html_doc = f"""
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border:1px solid #C4D7CC;background:#F9FBF9;border-radius:10px;padding:12px;margin:8px 0">
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a href="rawbt:base64,{payload_b64}" target="_top"
+        <a href="rawbt:data:application/octet-stream;base64,{payload_b64}" target="_top"
            style="flex:1;min-width:200px;text-decoration:none;background:#0B3B24;color:#FFFFFF;padding:12px;border:1px solid #072617;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">
           🖨️ Imprimir por Bluetooth (RawBT - Android)
         </a>
         <a href="rawbt:data:text/plain;base64,{texto_b64}" target="_top"
-           style="text-decoration:none;background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #5B8F6E;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">
+           style="text-decoration:none;background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #C5A059;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">
           📄 RawBT solo texto
         </a>
         <button id="cp_share_{safe_key}" type="button"
-           style="background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #5B8F6E;border-radius:8px;font-weight:700;cursor:pointer">
+           style="background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #C5A059;border-radius:8px;font-weight:700;cursor:pointer">
           📤 Compartir / Copiar
         </button>
       </div>
@@ -958,12 +856,12 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
           📶 Conectar e imprimir por Bluetooth BLE (Chrome)
         </button>
         <button id="cp_dl_{safe_key}" type="button"
-           style="background:#FAF8F5;color:#0B3B24;padding:11px;border:1px solid #5B8F6E;border-radius:8px;font-weight:700;cursor:pointer">
+           style="background:#FAF8F5;color:#0B3B24;padding:11px;border:1px solid #C5A059;border-radius:8px;font-weight:700;cursor:pointer">
           ⬇️ Descargar boleto .bin (abrir con RawBT)
         </button>
       </div>
       <div id="cp_status_{safe_key}" role="status" aria-live="polite" style="font-size:12px;line-height:1.45;margin-top:10px;color:#2B4A37">
-        <b>Impresora térmica Bluetooth (p. ej. MP210, 58 mm):</b> 1) Empareja la impresora en <b>Ajustes › Bluetooth</b> de Android. 2) Instala la app <b>RawBT</b>: <a href="https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter" target="_top" style="color:#0B3B24;font-weight:700">📲 Instalar RawBT</a>. 3) En RawBT, Ajustes ※ <b>Default printer</b>, elige la MP210. 4) Regresa aquí y pulsa <b>🖨🸏 Imprimir por Bluetooth (RawBT)</b>: se abre RawBT y envía el boleto completo con su QR. Si el botón no abre nada, RawBT no está instalada o no tiene impresora configurada: usa <b>⬇🸏 Descargar boleto .bin</b> y ábrelo o compártelo a RawBT. Impresoras solo BLE: botón BLE en Chrome.
+        <b>Impresora Bluetooth clásica (p. ej. MP210, 58 mm, USB+Bluetooth):</b> 1) Empareja la impresora en <b>Ajustes › Bluetooth</b> de Android. 2) Instala la app gratuita <b>RawBT</b> desde Play Store. 3) Pulsa el botón verde <b>RawBT</b> y elige la impresora emparejada: el boleto sale con su código QR. Si el botón no hace nada, RawBT no está instalada en este teléfono: usa <b>⬇️ Descargar boleto .bin</b> y abre el archivo con RawBT (o compártelo a RawBT). Las impresoras solo BLE pueden usar el botón BLE en Chrome.
       </div>
     </div>
     <script>
@@ -973,7 +871,6 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
       const btnBle = document.getElementById('cp_bt_{safe_key}');
       const btnShare = document.getElementById('cp_share_{safe_key}');
       const status = document.getElementById('cp_status_{safe_key}');
-      const btnDl = document.getElementById('cp_dl_{safe_key}');
       const say = t => status.innerHTML = t;
       const enc = new TextEncoder();
       const concat = (...parts) => {{ let n=parts.reduce((a,p)=>a+p.length,0), o=new Uint8Array(n), k=0; for(const p of parts){{o.set(p,k);k+=p.length;}} return o; }};
@@ -1077,145 +974,6 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
     st.components.v1.html(html_doc, height=310)
 
 
-def generar_ticket_prueba_impresion():
-    """Ticket corto de verificación: valida que la impresora reciba y procese ESC/POS + QR."""
-    ahora = datetime.now()
-    lineas = [
-        "       PRUEBA DE IMPRESIÓN",
-        " CLUB PARK VALET Y ESTACIONAMIENTOS",
-        "  SISTEMA INSTITUCIONAL DE CONTROL",
-        "------------------------------------",
-        f" FECHA  : {ahora.strftime('%d/%m/%Y %H:%M:%S')}",
-        f" USUARIO: {st.session_state.get('usuario_autenticado') or 'Sesión local'}",
-        " PRUEBA : BINARIO ESC/POS + QR",
-        " Si lees este texto, la impresora",
-        " recibe y procesa los datos.",
-        "------------------------------------",
-    ]
-    return "\n".join(lineas), f"CLUBPARK|PRUEBA|{ahora:%Y%m%d%H%M%S}"
-
-
-def panel_prueba_impresion(key_sufijo="diag", expandido=True):
-    """Prueba de impresión con registro de errores RawBT: clasifica los fallos en
-    conexión, envío ESC/POS o impresora y los guarda en la bitácora del sistema."""
-    with st.expander("🧪 Prueba de impresión y registro de errores RawBT", expanded=expandido):
-        texto_prueba, qr_prueba = generar_ticket_prueba_impresion()
-        st.code(texto_prueba)
-        imprimir_bluetooth(texto_prueba, key_suffix=f"prueba_{key_sufijo}", qr_payload=qr_prueba,
-                           contexto={"folio": "PRUEBA", "tipo_documento": "TICKET DE PRUEBA DE IMPRESIÓN"})
-        st.markdown("**¿Qué resultado obtuviste al pulsar el botón RawBT?**")
-        resultado = st.radio(
-            "Resultado de la prueba de impresión",
-            [
-                "✅ Imprimió correctamente",
-                "🔌 No se abrió RawBT / no hay impresora (fallo de conexión)",
-                "📡 RawBT se abrió pero el binario no llegó (fallo de envío ESC/POS)",
-                "🖨️ El dato llegó pero no imprimió (fallo de la impresora)",
-            ],
-            index=None,
-            key=f"res_prueba_{key_sufijo}",
-            label_visibility="collapsed",
-        )
-        detalle_extra = st.text_input(
-            "Detalle opcional (modelo de impresora, mensaje visto, paso donde se detuvo)",
-            key=f"det_prueba_{key_sufijo}",
-        )
-        if resultado is None:
-            st.caption("Selecciona el resultado y regístralo: el sistema distingue si los fallos son de conexión, envío o impresora.")
-        else:
-            if "Imprimió correctamente" in resultado:
-                etapa = "IMPRESION_OK"
-            elif "No se abrió RawBT" in resultado:
-                etapa = "CONEXION"
-            elif "no llegó" in resultado:
-                etapa = "ENVIO_ESCPOS"
-            else:
-                etapa = "IMPRESORA"
-            if st.button("📋 Registrar resultado en la bitácora de impresión",
-                         key=f"reg_prueba_{key_sufijo}", use_container_width=True):
-                eventos = registrar_evento_impresion(etapa, detalle_extra or resultado,
-                                                     "OK" if etapa == "IMPRESION_OK" else "FALLO")
-                st.success(f"Registrado: {ETAPAS_IMPRESION[etapa]}")
-                st.dataframe(pd.DataFrame(eventos[:15]), use_container_width=True, hide_index=True)
-        eventos_log = cargar_registro_impresion()
-        if eventos_log:
-            st.markdown("**Bitácora de impresión (últimos 15 eventos)**")
-            st.dataframe(pd.DataFrame(eventos_log[:15]), use_container_width=True, hide_index=True)
-
-
-def enviar_payload_guardado(payload_b64, folio, tipo_documento, indice):
-    """Reenvía un binario ESC/POS guardado: mismo folio, sin cobros ni tickets nuevos."""
-    safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", f"reintento_{indice}")
-    html_doc = f"""
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border:1px solid #5B8F6E;background:#F4F7F5;border-radius:10px;padding:12px;margin:8px 0">
-      <div style="font-size:12px;color:#2B4A37;margin-bottom:8px"><b>Reintento · {tipo_documento} · folio {folio}</b> — el binario guardado se reenvía sin cambios: no se genera cobro, folio ni ticket nuevo.</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a href="rawbt:base64,{payload_b64}" target="_top" style="flex:1;min-width:220px;text-decoration:none;background:#0B3B24;color:#FFFFFF;padding:12px;border:1px solid #072617;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">🖨️ Reimprimir por Bluetooth (RawBT)</a>
-        <button id="cp_dl_{safe_key}" type="button" style="background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #5B8F6E;border-radius:8px;font-weight:700;cursor:pointer">⬇️ Descargar .bin (abrir con RawBT)</button>
-      </div>
-    </div>
-    <script>
-    (() => {{
-      const btnDl = document.getElementById('cp_dl_{safe_key}');
-      btnDl.addEventListener('click', () => {{
-        try {{
-          const bin = Uint8Array.from(atob('{payload_b64}'), c => c.charCodeAt(0));
-          const blob = new Blob([bin], {{type: 'application/octet-stream'}});
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = 'reintento_folio_{folio}_escpos.bin';
-          document.body.appendChild(a); a.click(); a.remove();
-        }} catch(e) {{}}
-      }});
-    }})();
-    </script>
-    """
-    st.components.v1.html(html_doc, height=180)
-
-
-def panel_reintentos_impresion(expandido=False, sufijo_panel="panel"):
-    """Reintento de impresión desde la bitácora: mismo folio y mismo binario,
-    sin crear cobros, folios ni tickets duplicados."""
-    eventos = cargar_registro_impresion()
-    reintentables = [e for e in eventos if e.get("payload_b64") and e.get("resultado") != "OK"]
-    with st.expander("🔄 Reintento de impresiones fallidas (desde la bitácora)", expanded=expandido):
-        if not reintentables:
-            st.success("Sin impresiones pendientes de reintento.")
-            return
-        st.caption(
-            "Cada reintento reenvía el binario ESC/POS guardado con el mismo folio. "
-            "No se crean cobros, folios ni tickets nuevos. Cuando salga el papel, marca el evento como impreso."
-        )
-        for indice, evento in enumerate(reintentables[:8]):
-            # Llave estable: depende solo del id del evento, nunca del orden de la lista ni de la corrida,
-            # para que el clic no se pierda cuando la bitácora crece entre corridas.
-            llave = f"reintento_{sufijo_panel}_{evento.get('id_impresion') or re.sub(r'[^0-9]', '', str(evento.get('fecha_hora', '')))}"
-            with st.container(border=True):
-                st.markdown(
-                    f"**{evento.get('tipo_documento', 'BOLETO')} · folio {evento.get('folio', '—')} · "
-                    f"{evento.get('fecha_hora', '')} · {evento.get('etapa', '')}**"
-                )
-                st.caption(f"Registrado por {evento.get('usuario', '—')} · {evento.get('diagnóstico', '')}")
-                col_r1, col_r2 = st.columns(2)
-                if col_r1.button("🔄 Reintentar impresión", key=f"reintento_enviar_{llave}", use_container_width=True, type="primary"):
-                    enviar_payload_guardado(evento["payload_b64"], evento.get("folio", "—"), evento.get("tipo_documento", "BOLETO"), llave)
-                    registrar_evento_impresion(
-                        "REINTENTO",
-                        f"Reenvío del binario guardado · folio {evento.get('folio', '—')}",
-                        "PENDIENTE",
-                        datos={"folio": evento.get("folio", ""), "tipo_documento": evento.get("tipo_documento", "BOLETO")},
-                    )
-                    st.success("Binario listo: pulsa «🖨️ Reimprimir por Bluetooth (RawBT)» del recuadro verde.")
-                if col_r2.button("✅ Marcar como impreso", key=f"reintento_ok_{llave}", use_container_width=True):
-                    registrar_evento_impresion(
-                        "IMPRESION_OK",
-                        f"Confirmado por el operador tras reintento · folio {evento.get('folio', '—')}",
-                        "OK",
-                        datos={"folio": evento.get("folio", ""), "tipo_documento": evento.get("tipo_documento", "BOLETO")},
-                    )
-                    st.rerun()
-
-
 def dinero(valor):
     try:
         return float(valor or 0)
@@ -1246,6 +1004,10 @@ def guardar_foto(uploaded_file, folio, vista):
     """Guarda una foto optimizada y devuelve su ruta relativa al directorio de datos."""
     if isinstance(uploaded_file, Image.Image):
         imagen = uploaded_file.copy()
+    elif isinstance(uploaded_file, str) and uploaded_file.startswith("data:image/"):
+        imagen = imagen_desde_captura(uploaded_file)
+        if imagen is None:
+            raise ValueError("La cámara no entregó una imagen válida.")
     else:
         imagen = Image.open(uploaded_file)
     imagen = ImageOps.exif_transpose(imagen).convert("RGB")
@@ -1399,137 +1161,79 @@ def generar_excel_oficial(df):
     )
 
 
-def leer_codigo_qr(imagen_pil):
-    """Lector de QR robusto: prepara la imagen (contraste, ampliacion, binarizacion,
-    inversiones y rotaciones) y prueba tres decodificadores antes de rendirse."""
-    if imagen_pil is None:
-        return None
-    if not isinstance(imagen_pil, Image.Image):
+def imagen_desde_captura(valor):
+    """Convierte una captura del componente trasero (data URL) a PIL."""
+    if isinstance(valor, Image.Image):
+        return valor.copy()
+    if isinstance(valor, str) and valor.startswith("data:image/"):
         try:
-            imagen_pil = Image.open(imagen_pil)
+            _, encoded = valor.split(",", 1)
+            return Image.open(io.BytesIO(base64.b64decode(encoded))).copy()
         except Exception:
             return None
-    try:
-        base = ImageOps.exif_transpose(imagen_pil).convert("RGB")
-    except Exception:
-        base = imagen_pil.convert("RGB")
-
-    candidatos = [base]
-    try:
-        gris = ImageOps.autocontrast(base.convert("L"))
-        ancho, alto = gris.size
-        if max(ancho, alto) < 1100:
-            factor = max(2, int(1100 / max(ancho, alto)))
-            candidatos.append(gris.resize((ancho * factor, alto * factor), Image.LANCZOS))
-        candidatos.append(gris)
-        candidatos.append(ImageOps.invert(gris))
-        candidatos.append(ImageOps.autocontrast(base))
+    if valor is not None:
         try:
-            import cv2
-            import numpy as np
-            arr = np.array(gris)
-            _, otsu = cv2.threshold(arr, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            candidatos.append(Image.fromarray(otsu))
-            candidatos.append(Image.fromarray(cv2.adaptiveThreshold(
-                arr, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 31, 2)))
+            return Image.open(valor).copy()
         except Exception:
-            pass
-    except Exception:
-        pass
+            return None
+    return None
 
-    def _texto_de(resultados):
-        for r in resultados or []:
-            texto = getattr(r, "text", None)
-            if texto is None:
-                datos = getattr(r, "data", None)
-                if isinstance(datos, bytes):
-                    texto = datos.decode("utf-8", "replace")
-                else:
-                    texto = str(datos or "")
-            if str(texto).strip():
-                return str(texto).strip()
-        return None
 
-    # 1) zxing-cpp con TRY_HARDER y rotaciones
+def leer_codigo_qr(imagen_pil):
+    imagen_pil = imagen_desde_captura(imagen_pil) or imagen_pil
+    # 1) zxing-cpp: decodificador robusto, no requiere librerías del sistema
     try:
         import zxingcpp
-        for imagen in candidatos:
-            try:
-                hallado = _texto_de(zxingcpp.read_barcodes(imagen, try_harder=True, try_rotate=True))
-                if hallado:
-                    return hallado
-            except Exception:
-                pass
+        resultados = zxingcpp.read_barcodes(imagen_pil)
+        for r in resultados:
+            texto = getattr(r, "text", "") or ""
+            if texto.strip():
+                return texto.strip()
     except Exception:
         pass
-
-    # 2) pyzbar con rotaciones manuales
     try:
         from pyzbar.pyzbar import decode
-        for imagen in candidatos:
-            for angulo in (0, 90, 180, 270):
-                prueba = imagen if angulo == 0 else imagen.rotate(angulo, expand=True)
-                try:
-                    hallado = _texto_de(decode(prueba))
-                    if hallado:
-                        return hallado
-                except Exception:
-                    pass
+        resultado = decode(imagen_pil)
+        if resultado:
+            return resultado[0].data.decode("utf-8").strip()
     except Exception:
         pass
-
-    # 3) detector de OpenCV
     try:
         import cv2
         import numpy as np
-        detector = cv2.QRCodeDetector()
-        for imagen in candidatos:
-            arr = cv2.cvtColor(np.array(imagen), cv2.COLOR_RGB2BGR)
-            for angulo in (0, 90, 180, 270):
-                prueba = arr if angulo == 0 else np.rot90(arr, angulo // 90)
-                try:
-                    valor, _, _ = detector.detectAndDecode(prueba)
-                    if valor and valor.strip():
-                        return valor.strip()
-                except Exception:
-                    pass
+        img = np.array(imagen_pil.convert("RGB"))
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        valor, _, _ = cv2.QRCodeDetector().detectAndDecode(img)
+        return valor.strip() if valor else None
     except Exception:
-        pass
-    return None
+        return None
+
 
 def lector_qr_camara_trasera(key="lector_qr_trasero", height=390):
-    """Lectura de QR con la cámara del dispositivo, sin componentes externos.
-    Usa el lector robusto (preprocesamiento + 3 decodificadores) sobre la captura."""
-    foto_qr = st.camera_input(
-        "Capturar el código QR", key=key,
-        help="La app pide permiso de cámara y abre la del teléfono. Si no abre o abre la frontal, usa «Subir foto del código QR»: al elegir Cámara en el selector de Android se usa la cámara trasera. Enfoca el QR a 10-15 cm con buena luz.",
-    )
-    if foto_qr is None:
-        st.caption("¿La cámara no abre en tu navegador? Sube una fotografía del código QR.")
-        subida = st.file_uploader("Subir foto del código QR", type=["png", "jpg", "jpeg"], key=f"{key}_subida")
-        if subida is not None:
-            try:
-                token = leer_codigo_qr(Image.open(subida))
-                return str(token).strip() if token else None
-            except Exception:
-                return None
+    """Componente de cámara trasera; devuelve texto del QR detectado."""
+    if CAMARA_COMPONENT is None:
+        st.error("No se encontró el componente de cámara. Incluye clubpark_component/index.html junto a la aplicación.")
         return None
-    try:
-        token = leer_codigo_qr(Image.open(foto_qr))
-        return str(token).strip() if token else None
-    except Exception:
-        st.warning("No se pudo leer el QR. Acércate, mejora la luz y vuelve a tomar la foto.")
-        return None
+    resultado = CAMARA_COMPONENT(mode="qr", key=key, height=height, default=None)
+    if isinstance(resultado, dict) and resultado.get("type") == "qr":
+        return resultado.get("text")
+    return resultado if isinstance(resultado, str) else None
 
 
 def camara_trasera_foto_pertenencias(key="foto_pertenencias_trasera", height=430):
-    """Captura fotográfica con la cámara del dispositivo, sin componentes externos."""
-    captura = st.camera_input("Tomar fotografía", key=key)
-    if captura is None:
-        st.caption("Si la cámara no abre o abrió la frontal, cambia el modo a «📁 Subir fotos»: al elegir la opción Cámara en el selector de Android se usa la cámara trasera del teléfono.")
+    """Captura evidencia usando la cámara posterior del dispositivo."""
+    if CAMARA_COMPONENT is None:
+        st.error("No se encontró el componente de cámara. Incluye clubpark_component/index.html junto a la aplicación.")
+        return None
+    resultado = CAMARA_COMPONENT(mode="photo", key=key, height=height, default=None)
+    if isinstance(resultado, dict) and resultado.get("type") == "photo":
+        resultado = resultado.get("data")
+    if not isinstance(resultado, str) or not resultado.startswith("data:image/"):
         return None
     try:
-        return Image.open(captura).copy()
+        encabezado, encoded = resultado.split(",", 1)
+        imagen_bytes = base64.b64decode(encoded)
+        return Image.open(io.BytesIO(imagen_bytes)).copy()
     except Exception:
         st.warning("No se pudo procesar la foto. Vuelve a tomarla.")
         return None
@@ -1648,24 +1352,6 @@ def ejecutar_pruebas_operativas():
         assert b"PRUEBA BOLETO" in payload
         return f"Binario ESC/POS válido de {len(payload)} bytes con QR"
 
-    def prueba_impresion_rawbt():
-        """Valida el payload de prueba y la bitácora de errores de impresión (ida y vuelta)."""
-        texto, qr = generar_ticket_prueba_impresion()
-        payload = construir_payload_escpos(texto, qr)
-        assert payload[:2] == b"\x1b@", "Falta inicialización ESC @"
-        assert b"\x1d(\x6b" in payload, "Faltan comandos del QR en el payload de prueba"
-        previos = len(cargar_registro_impresion())
-        registrar_evento_impresion("IMPRESION_OK", "Prueba operativa automática de impresión")
-        eventos = cargar_registro_impresion()
-        assert len(eventos) == previos + 1, "La bitácora de impresión no guardó el evento"
-        ultimo = eventos[0]
-        assert ultimo.get("etapa") == "IMPRESION_OK" and "diagnóstico" in ultimo, "Evento incompleto"
-        eventos.pop(0)  # limpia el evento de prueba para no ensuciar la bitácora real
-        ARCHIVO_REGISTRO_IMPRESION.write_text(
-            json.dumps(eventos, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        return f"Payload ESC/POS de prueba ({len(payload)} bytes) y bitácora RawBT operativos"
-
     def prueba_credenciales():
         assert isinstance(ACCESOS, dict) and ACCESOS, "No hay credenciales cargadas"
         for token, datos in ACCESOS.items():
@@ -1695,7 +1381,6 @@ def ejecutar_pruebas_operativas():
     registrar("Generación y lectura de código QR", prueba_qr)
     registrar("Partes del ticket (boleto + llavero)", prueba_partes_ticket)
     registrar("Binario de impresión térmica ESC/POS", prueba_escpos)
-    registrar("Prueba de impresión y bitácora RawBT", prueba_impresion_rawbt)
     registrar("Integridad de credenciales QR", prueba_credenciales)
     registrar("Bitácora de auditoría", prueba_auditoria)
     registrar("Carpeta de fotografías del vehículo", prueba_fotos)
@@ -1724,35 +1409,46 @@ if st.session_state.usuario_autenticado is None:
     with center:
         st.markdown(f"""
         <div class="clubpark-header-card" style="text-align:center;padding:18px 20px;margin-bottom:16px">
-          <div class="clubpark-badge" style="margin-bottom:6px">Acceso Operativo Oficial</div>
+          {logo_clubpark_html(150, "0 0 10px 0")}
+          <div class="clubpark-gold-badge" style="margin-bottom:6px">Acceso Operativo Oficial</div>
           <h2 style="color:#FFFFFF !important;margin:4px 0 2px 0;font-size:22px">CLUB PARK VALET</h2>
-          <div style="font-size:12px;color:#7FA98C;letter-spacing:1px">Y ESTACIONAMIENTOS S.A. DE C.V.</div>
+          <div style="font-size:12px;color:#D4AF37;letter-spacing:1px">Y ESTACIONAMIENTOS S.A. DE C.V.</div>
         </div>
         """, unsafe_allow_html=True)
 
         st.info("Identifícate mediante credencial QR o ingresa tu token operativo.")
 
-        opciones_login = [
-            "📷 Foto de QR con la cámara del dispositivo (Recomendado)",
-            "🖼️ Subir imagen QR",
-            "🔑 Token manual",
-        ]
         metodo = st.radio(
             "Método de autenticación:",
-            opciones_login,
+            [
+                "📸 Foto de QR con la cámara del dispositivo (Recomendado)",
+                "🖼️ Subir imagen QR",
+                "🔑 Token manual",
+                "📷 Visor en vivo de QR (experimental)",
+            ],
             horizontal=False,
-            key="metodo_login_operativo_v6"
+            key="metodo_login_operativo"
         )
 
         token = str(st.query_params.get("qrscan", "") or "").strip() or None
 
-        if metodo.startswith("📷"):
+        if metodo.startswith("📸"):
             if not token:
-                st.caption("Pulsa el botón: se abrirá la cámara de tu teléfono. En Chrome Android usa el botón «Cambiar cámara» para usar la trasera. Enfoca la credencial QR a 10-15 cm, con buena luz.")
+                st.caption("Pulsa el botón: se abrirá la cámara de tu teléfono (usa la trasera). Enfoca la credencial QR a 10-15 cm.")
+                foto_qr = CAMARA_COMPONENT(mode="photo", key="camara_trasera_login_qr", height=430, default=None) if CAMARA_COMPONENT else None
+                if foto_qr:
+                    token_detectado = leer_codigo_qr(foto_qr)
+                    if token_detectado:
+                        token = token_detectado.strip()
+                    else:
+                        st.warning("No se detectó un QR legible. Acércate, mejora la luz y vuelve a tomar la foto.")
+
+        elif metodo.startswith("📷"):
+            if not token:
+                st.caption("Si el navegador bloquea la cámara del visor (común en móviles por los permisos de ventanas integradas), usa la opción recomendada de arriba o el token manual.")
                 token_leido = lector_qr_camara_trasera("lector_login_trasero", height=390)
                 if token_leido:
                     token = str(token_leido).strip()
-                    st.success("Código QR leído correctamente.")
 
         elif metodo.startswith("🖼️"):
             archivo_qr = st.file_uploader("Selecciona el archivo de tu credencial QR", type=["png", "jpg", "jpeg"])
@@ -1792,16 +1488,17 @@ st.markdown(f"""
 <div class="clubpark-header-card">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
     <div>
-      <div class="clubpark-badge">SISTEMA INSTITUCIONAL DE CONTROL OPERATIVO</div>
+      {logo_clubpark_html(140, "0 0 10px 0")}
+      <div class="clubpark-gold-badge">SISTEMA INSTITUCIONAL DE CONTROL OPERATIVO</div>
       <h2 style="color:#FFFFFF !important;margin:6px 0 2px 0;font-size:24px">CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.</h2>
       <div style="font-size:13px;color:#EBF3EE">
         <b>Usuario:</b> {st.session_state.usuario_autenticado} &nbsp;|&nbsp;
         <b>Rol:</b> {st.session_state.rol} &nbsp;|&nbsp;
-        <b>Sucursal:</b> <span style="color:#7FA98C;font-weight:700">{sucursal_texto}</span>
+        <b>Sucursal:</b> <span style="color:#D4AF37;font-weight:700">{sucursal_texto}</span>
       </div>
     </div>
     <div style="text-align:right">
-      <div style="font-size:11px;color:#7FA98C;text-transform:uppercase;font-weight:700">Identidad Corporativa</div>
+      <div style="font-size:11px;color:#D4AF37;text-transform:uppercase;font-weight:700">Identidad Corporativa</div>
       <div style="font-size:13px;font-weight:700;color:#FFFFFF">COLOR CONSTITUCIONAL: VERDE BOTELLA (#0B3B24)</div>
     </div>
   </div>
@@ -1809,7 +1506,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown('<div style="font-weight:800;color:#FFFFFF;letter-spacing:2px;font-size:16px;text-align:center;background:#0B3B24;border-radius:10px;padding:10px 8px;border:1px solid #2F6B4C">CLUB PARK VALET</div>', unsafe_allow_html=True)
+    st.markdown(logo_clubpark_html(150, "0 0 8px 0", fondo="#FFFFFF") + '<div style="font-weight:800;color:#F4F7F5;letter-spacing:2px;font-size:15px;margin:2px 0 6px 0;text-align:center">CLUB PARK VALET</div>', unsafe_allow_html=True)
     st.subheader("Panel de sesión")
     st.write(f"**Usuario:** {st.session_state.usuario_autenticado}")
     st.write(f"**Rol:** {st.session_state.rol}")
@@ -1820,86 +1517,7 @@ with st.sidebar:
         st.session_state.rol = None
         st.rerun()
 
-def analisis_inteligente(registros):
-    """Análisis automático de la operación: KPIs, alertas tempranas y resumen
-    ejecutivo. Se recalcula con la información real cada vez que se consulta."""
-    ahora = datetime.now()
-    activos = [r for r in registros if r.get("estado") != "Entregado"]
-    entregados = [r for r in registros if r.get("estado") == "Entregado"]
-
-    def horas_estancia(r):
-        try:
-            iso = r.get("fecha_entrada_iso") or ""
-            if not iso:
-                return None
-            return (ahora - datetime.fromisoformat(iso)).total_seconds() / 3600
-        except Exception:
-            return None
-
-    estancias = [(r, h) for r, h in ((r, horas_estancia(r)) for r in activos) if h is not None]
-
-    alertas = []
-    for r, h in sorted(estancias, key=lambda par: -par[1]):
-        ident = r.get("id", "")
-        placas = r.get("placas", "")
-        suc = r.get("sucursal", "")
-        if h >= 12:
-            alertas.append({"tipo": "🚨 Estancia crítica", "sucursal": suc, "detalle": f"{ident} ({placas}) en {suc}: {h:.1f} h sin salida", "accion": "Verificar con el encargado y registrar salida o incidencia hoy."})
-        elif h >= 6:
-            alertas.append({"tipo": "⚠️ Estancia prolongada", "sucursal": suc, "detalle": f"{ident} ({placas}) en {suc}: {h:.1f} h", "accion": "Dar seguimiento en la próxima revisión."})
-    placas_activas = {}
-    for r in activos:
-        clave = normalizar_texto(r.get("placas")).upper()
-        if clave:
-            placas_activas.setdefault(clave, []).append(r)
-    for clave, lista in placas_activas.items():
-        if len(lista) > 1:
-            alertas.append({"tipo": "⚠️ Placa repetida en resguardo", "sucursal": ", ".join(sorted({str(r.get("sucursal", "")) for r in lista})), "detalle": f"Placa {clave} en {len(lista)} vehículos activos: " + ", ".join(str(r.get('id', '')) for r in lista), "accion": "Revisar duplicados: posible error de captura."})
-    for r in entregados:
-        if normalizar_texto(r.get("pago_estado", "")).lower() not in ("pagado", "cortado", ""):
-            alertas.append({"tipo": "⚠️ Entrega sin cobro confirmado", "sucursal": str(r.get("sucursal", "")), "detalle": f"{r.get('id', '')} ({r.get('placas', '')}) en {r.get('sucursal', '')}", "accion": "Conciliar el cobro en el corte de caja."})
-
-    entregados_hoy = [r for r in entregados if str(r.get("fecha_salida", "")).startswith(ahora.strftime("%d/%m/%Y"))]
-    ingresos_hoy = sum(dinero(r.get("tarifa")) for r in entregados_hoy)
-    estancia_prom = (sum(h for _, h in estancias) / len(estancias)) if estancias else 0.0
-    sucursales_activas = sorted({r.get("sucursal", "Sin sucursal") for r in activos})
-    por_sucursal = max(sucursales_activas, key=lambda s: sum(1 for r in activos if r.get("sucursal") == s)) if sucursales_activas else "—"
-    conteo_top = sum(1 for r in activos if r.get("sucursal") == por_sucursal) if por_sucursal != "—" else 0
-    ticket_prom = (sum(dinero(r.get("tarifa")) for r in entregados_hoy) / len(entregados_hoy)) if entregados_hoy else 0.0
-
-    kpis = [
-        ("Vehículos en resguardo", f"{len(activos)}"),
-        ("Entregados hoy", f"{len(entregados_hoy)}"),
-        ("Ingresos de hoy", f"${ingresos_hoy:,.0f}"),
-        ("Estancia promedio", f"{estancia_prom:.1f} h" if activos else "—"),
-    ]
-
-    resumen = (
-        f"Hay {len(activos)} vehículos en resguardo en {len(sucursales_activas)} sucursal(es). "
-        f"Hoy se han entregado {len(entregados_hoy)} vehículos con ingresos de ${ingresos_hoy:,.0f} "
-        f"(ticket promedio ${ticket_prom:,.0f}). "
-        + (f"La sucursal con más vehículos en sitio es {por_sucursal} ({conteo_top}). " if por_sucursal != "—" else "")
-        + (f"La estancia promedio en sitio es de {estancia_prom:.1f} horas. " if activos else "")
-        + f"Análisis generado automáticamente el {ahora.strftime('%d/%m/%Y %H:%M')}."
-    )
-
-    recomendaciones = []
-    if len(activos) >= 20:
-        recomendaciones.append("Volumen alto en sitio: refuerza personal en la zona de resguardo durante horas pico.")
-    if estancia_prom >= 5 and activos:
-        recomendaciones.append("La estancia promedio supera 5 horas: revisa tarifas por tiempo o promueve pagos anticipados.")
-    sucursales_alertadas = sorted({a.get("sucursal", "") for a in alertas if a.get("sucursal")})
-    if sucursales_alertadas:
-        recomendaciones.append("Concentra la revisión en: " + ", ".join(sucursales_alertadas[:5]) + ".")
-    if not entregados_hoy and activos:
-        recomendaciones.append("Aún sin salidas registradas hoy: verifica que los encargados estén usando el módulo de Salida y Cobro.")
-    if not recomendaciones:
-        recomendaciones.append("Operación dentro de parámetros normales. Continúa con el protocolo fotográfico establecido.")
-
-    return kpis, alertas, resumen, recomendaciones
-
-
-tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud, tab_qrs, tab_pruebas, tab_intel = st.tabs([
+tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud, tab_qrs, tab_pruebas = st.tabs([
     "📥 Ingreso y Fotografías",
     "📋 Vehículos Registrados",
     "🚘 Salida y Cobro",
@@ -1911,7 +1529,6 @@ tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cie
     "🕵️ Auditoría y WhatsApp",
     "🏷️ Credenciales QR Institucionales",
     "🧪 Pruebas Operativas",
-    "🧠 Inteligencia Operativa",
 ])
 
 
@@ -1919,7 +1536,7 @@ tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cie
 # TAB 1: INGRESO
 # ---------------------------------------------------------------------
 with tab_ing:
-    encabezado_institucional("REGISTRO DE INGRESO DE VEHÍCULO", "OPERACIÓN 1 · RECEPCIÓN", "Protocolo institucional de recepción con evidencia fotográfica obligatoria")
+    st.subheader("1. Datos del vehículo y recepción")
     c1, c2 = st.columns(2)
     with c1:
         if es_global:
@@ -1948,18 +1565,23 @@ with tab_ing:
         )
     st.caption("Marca la opción rápida o describe los objetos que el cliente deja bajo resguardo.")
     st.markdown("**📷 Fotografías de pertenencias bajo resguardo (opcional)**")
-    st.caption("Puedes capturar con la cámara del celular o adjuntar fotos desde la galería.")
-
+    st.caption("Puedes capturar con la cámara nativa del celular, con el visor en vivo o adjuntando fotos.")
+    
     opc_cam_p = st.radio(
         "Herramienta de captura:",
-        ["📸 Cámara del dispositivo (Recomendado)", "📁 Subir fotos desde galería"],
+        ["📸 Cámara nativa del dispositivo (Recomendado)", "📷 Visor en vivo cámara trasera", "📁 Subir fotos desde galería"],
         horizontal=True,
-        key="selector_camara_pertenencias_v6"
+        key="selector_camara_pertenencias"
     )
     foto_pertenencias_camara = None
     fotos_pertenencias_archivos = []
 
-    if opc_cam_p.startswith("📸"):
+    if opc_cam_p == "📸 Cámara nativa del dispositivo (Recomendado)":
+        foto_nativa_subida = CAMARA_COMPONENT(mode="photo", key="camara_trasera_pert", height=430, default=None) if CAMARA_COMPONENT else None
+        if foto_nativa_subida:
+            foto_pertenencias_camara = imagen_desde_captura(foto_nativa_subida)
+            st.image(foto_pertenencias_camara, caption="Fotografía de pertenencias capturada", width=260)
+    elif opc_cam_p == "📷 Visor en vivo cámara trasera":
         foto_pertenencias_camara = camara_trasera_foto_pertenencias("foto_pertenencias_trasera", height=430)
         if foto_pertenencias_camara:
             st.image(foto_pertenencias_camara, caption="Fotografía de pertenencias capturada", width=260)
@@ -1975,11 +1597,10 @@ with tab_ing:
     st.caption("Las vistas fotográficas son OBLIGATORIAS antes de registrar el ingreso: protegen al operador y a la empresa frente a reclamaciones de daños o pérdida de pertenencias. Elige el protocolo completo (6) o el rápido (4) según la operación.")
     opc_cam_v = st.radio(
         "Herramienta de captura del vehículo:",
-        ["📸 Cámara del dispositivo (Recomendado)", "📁 Subir fotos desde galería"],
+        ["📸 Cámara nativa del dispositivo (Recomendado)", "📁 Subir fotos desde galería"],
         horizontal=True,
-        key="selector_camara_vehiculo_v6",
+        key="selector_camara_vehiculo",
     )
-    st.caption("Si la cámara del navegador no abre o abre la frontal, cambia a «📁 Subir fotos desde galería»: en el selector de Android elige «Cámara» para capturar con la cámara trasera del teléfono.")
 
     VISTAS_COMPLETAS = [
         ("frente", "1. Vista frontal"),
@@ -2007,9 +1628,10 @@ with tab_ing:
     fotos_vehiculo = {}
     for clave_vista, titulo_vista in VISTAS_VEHICULO:
         if opc_cam_v.startswith("📸"):
-            fotos_vehiculo[clave_vista] = st.camera_input(
-                f"{titulo_vista} (obligatoria)", key=f"foto_veh_{clave_vista}"
-            )
+            st.markdown(f"**{titulo_vista} (obligatoria)**")
+            fotos_vehiculo[clave_vista] = CAMARA_COMPONENT(
+                mode="photo", key=f"foto_veh_trasera_{clave_vista}", height=430, default=None
+            ) if CAMARA_COMPONENT else None
         else:
             fotos_vehiculo[clave_vista] = st.file_uploader(
                 f"{titulo_vista} (obligatoria)", type=["jpg", "jpeg", "png"], key=f"foto_veh_{clave_vista}"
@@ -2084,10 +1706,6 @@ with tab_ing:
                 if guardar_bd(st.session_state.vehiculos):
                     st.session_state.ultimo_ticket = registro["ticket_texto"]
                     st.session_state.ultimo_folio = folio
-                    guardar_evento_auditoria(
-                        "ALTA DE VEHICULO",
-                        f"Folio {folio} · {sucursal} · {marca} placas {placas} · ${tarifa:,.2f} · operador {operador or 'no indicado'}",
-                    )
                     st.success(f"Ingreso registrado. Folio: {folio}")
                     st.rerun()
             except Exception as exc:
@@ -2122,7 +1740,7 @@ with tab_ing:
 # TAB 2: VEHÍCULOS REGISTRADOS
 # ---------------------------------------------------------------------
 with tab_list:
-    encabezado_institucional("VEHÍCULOS REGISTRADOS", "CONTROL DE RESGUARDO", "Consulta, seguimiento y estado de cada vehículo bajo resguardo")
+    st.subheader("Vehículos registrados")
     visibles = vehiculos_visibles(st.session_state.vehiculos)
     if not visibles:
         st.info("No hay vehículos registrados para tu alcance.")
@@ -2197,7 +1815,7 @@ with tab_list:
 # TAB: SALIDA Y COBRO
 # ---------------------------------------------------------------------
 with tab_salida:
-    encabezado_institucional("SALIDA DE VEHÍCULO Y REGISTRO DE COBRO", "OPERACIÓN 2 · ENTREGA", "Cobro verificado, comprobante oficial y entrega del vehículo")
+    st.subheader("Salida de vehículo y registro de cobro")
     st.caption("Escanea el QR único del boleto o captura el folio. La salida solo se registra una vez.")
     metodo_busqueda = st.radio(
         "Cómo localizar el vehículo",
@@ -2210,7 +1828,7 @@ with tab_salida:
         valor_busqueda = st.text_input("Folio del boleto", key="folio_buscar_salida").strip()
     elif metodo_busqueda == "Escanear QR con cámara":
         valor_query = str(st.query_params.get("qrscan", "") or "").strip()
-        st.info("Pulsa el botón para abrir la cámara de tu teléfono (usa «Cambiar cámara» para la trasera) o sube una foto del QR. El lector es robusto: lee fotos pequeñas, giradas o con poca luz.")
+        st.info("Se abrirá la cámara posterior. Mantén el QR dentro del recuadro; al detectarlo, el lector lo enviará directamente al formulario.")
         nonce_lector = int(st.session_state.get("qr_scan_nonce_salida", 0))
         valor_leido = lector_qr_camara_trasera(f"lector_salida_trasero_{nonce_lector}", height=430)
         valor_busqueda = str(valor_leido or valor_query or "").strip()
@@ -2342,46 +1960,26 @@ with tab_salida:
         )
         pago_reciente = comprobante_reciente.get("pago", {})
         registro_reciente = comprobante_reciente.get("registro", {})
-        registro_completo_reciente = next(
-            (r for r in vehiculos_visibles(st.session_state.vehiculos) if r.get("id") == registro_reciente.get("id")),
-            {},
-        ) or {}
         texto_comprobante = "\n".join([
-            "       TICKET DE SALIDA",
-            f"N° {registro_reciente.get('id', '')}",
-            "RUT: CPV-ESTACIONAMIENTOS",
-            "CLUB PARK VALET Y",
-            "ESTACIONAMIENTOS",
-            "--------------------------------",
-            f"Placa: {registro_reciente.get('placas', '')}",
-            f"Ubicacion: {registro_reciente.get('sucursal', '')}",
-            f"Ingreso: {registro_completo_reciente.get('fecha_entrada') or registro_completo_reciente.get('fecha', '') or pago_reciente.get('fecha_hora', '')}",
-            f"Pago: {pago_reciente.get('fecha_hora', '')}",
-            f"Operador: {pago_reciente.get('usuario', '')}",
+            "CLUB PARK",
+            "VALET Y ESTACIONAMIENTOS S.A. DE C.V.",
+            "COMPROBANTE DE COBRO",
             "--------------------------------",
             f"Sucursal: {registro_reciente.get('sucursal', '')}",
             f"Folio: {registro_reciente.get('id', '')}",
             f"Vehiculo: {registro_reciente.get('marca', '')} {registro_reciente.get('placas', '')}",
             f"Fecha: {pago_reciente.get('fecha_hora', '')}",
-            f"Total: ${dinero(pago_reciente.get('importe')):,.2f}",
-            "SALDO PENDIENTE: $0.00",
-            "--------------------------------",
+            f"Importe: ${dinero(pago_reciente.get('importe')):,.2f} MXN",
             f"Metodo: {pago_reciente.get('metodo', '')}",
             f"Estado: {pago_reciente.get('estado', '')}",
             f"Referencia: {pago_reciente.get('referencia', '') or 'No aplica'}",
             f"Atendio: {pago_reciente.get('usuario', '')}",
             "--------------------------------",
-            "BIENVENIDO. Primera hora $25.00.",
-            "A partir de la segunda hora, aplican",
-            "tarifas por fraccion: 15 min $10.00",
-            "los primeros 15, posteriores $5.00.",
-            "Factura: facturacionclubpark@gmail.com",
-            "Conserve este ticket.",
+            "Conserve este comprobante.",
             "Gracias por su preferencia.",
         ])
         st.markdown("**Impresión térmica Bluetooth del comprobante**")
-        imprimir_bluetooth(texto_comprobante, f"comprobante_{registro_reciente.get('id', 'reciente')}",
-                           contexto={"folio": registro_reciente.get('id', ''), "tipo_documento": "TICKET DE SALIDA"})
+        imprimir_bluetooth(texto_comprobante, f"comprobante_{registro_reciente.get('id', 'reciente')}")
         st.download_button(
             "⬇️ Descargar comprobante en texto",
             data="CLUB PARK\nCOMPROBANTE DE COBRO\n" + "\n".join(
@@ -2405,7 +2003,7 @@ with tab_salida:
 # TAB: BALANCES Y RENTABILIDAD POR SUCURSAL
 # ---------------------------------------------------------------------
 with tab_balance:
-    encabezado_institucional("BALANCES OPERATIVOS Y RENTABILIDAD", "FINANZAS", "Rentabilidad por sucursal, gastos operativos y tendencias")
+    st.subheader("Balances operativos y rentabilidad por sucursal")
     st.caption(
         "El conteo de vehículos y los ingresos se calculan desde los registros. "
         "La rentabilidad usa los gastos operativos capturados por el supervisor o auditor."
@@ -2623,7 +2221,7 @@ with tab_balance:
 # TAB: CORTES DE CAJA
 # ---------------------------------------------------------------------
 with tab_corte:
-    encabezado_institucional("CORTE DE CAJA", "CONTROL DE EFECTIVO", "Conciliación de cobros en efectivo por sucursal y fecha")
+    st.subheader("Corte de caja")
     st.caption("Los totales se calculan con salidas registradas y pagos confirmados. Pagos QR/tarjeta no confirmados no se suman a lo cobrado.")
     registros_entregados = [
         r for r in vehiculos_visibles(st.session_state.vehiculos)
@@ -2668,1009 +2266,4 @@ with tab_corte:
     m4.metric("Total cobrado", f"${total_cobrado:,.2f}")
     st.write(f"**Movimientos confirmados:** {len(movimientos_corte)}")
     if movimientos_corte:
-        st.dataframe(pd.DataFrame(movimientos_corte), use_container_width=True, hide_index=True)
-    else:
-        st.info("No hay pagos confirmados en ese periodo.")
-
-    st.markdown("#### Arqueo de efectivo")
-    apertura = st.number_input("Fondo inicial de caja ($)", min_value=0.0, value=0.0, step=50.0, key="fondo_apertura")
-    efectivo_contado = st.number_input("Efectivo contado físicamente al cierre ($)", min_value=0.0, value=0.0, step=50.0, key="efectivo_contado")
-    efectivo_esperado = apertura + efectivo_total
-    diferencia = efectivo_contado - efectivo_esperado
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Efectivo esperado", f"${efectivo_esperado:,.2f}")
-    c2.metric("Efectivo contado", f"${efectivo_contado:,.2f}")
-    c3.metric("Diferencia", f"${diferencia:,.2f}")
-    if st.button("🔒 Guardar corte de caja", type="primary", key="guardar_corte"):
-        corte = {
-            "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "fecha_operativa": str(fecha_corte),
-            "desde": inicio_corte,
-            "hasta": fin_corte,
-            "sucursal": suc_corte,
-            "usuario": st.session_state.usuario_autenticado,
-            "efectivo": efectivo_total,
-            "qr_confirmado": qr_total,
-            "tarjeta_confirmada": tarjeta_total,
-            "total_cobrado": total_cobrado,
-            "fondo_inicial": apertura,
-            "efectivo_contado": efectivo_contado,
-            "diferencia": diferencia,
-            "folios": [p.get("folio") for p in movimientos_corte],
-        }
-        cortes_file = DATA_DIR / "cortes_caja.json"
-        try:
-            cortes = []
-            if cortes_file.exists():
-                cortes = json.loads(cortes_file.read_text(encoding="utf-8"))
-            cortes.insert(0, corte)
-            cortes_file.write_text(json.dumps(cortes, ensure_ascii=False, indent=2), encoding="utf-8")
-            guardar_evento_auditoria("CORTE DE CAJA", f"{suc_corte} · {fecha_corte} · total ${total_cobrado:.2f} · diferencia ${diferencia:.2f}")
-            st.success("Corte guardado con usuario, sucursal, periodo, métodos de pago y diferencia.")
-        except (OSError, json.JSONDecodeError) as exc:
-            st.error(f"No se pudo guardar el corte: {exc}")
-
-
-# ---------------------------------------------------------------------
-# CIERRE DIARIO POR SUCURSAL
-# ---------------------------------------------------------------------
-with tab_cierre_diario:
-    encabezado_institucional("REPORTE DIARIO DE CIERRE POR SUCURSAL", "CIERRE OPERATIVO", "Balance formal del día: ingresos, gastos y resultado por sucursal")
-    st.caption(
-        "Captura y entrega el balance diario de boletos, cobros y gastos. "
-        "Cada sucursal puede guardar un cierre por fecha; el contador puede consultar todas."
-    )
-
-    CIERRES_DIARIOS_FILE = DATA_DIR / "cierres_diarios_sucursal.json"
-    GASTOS_CIERRE_FILE = DATA_DIR / "gastos_operativos.json"
-
-    def cargar_cierres_diarios():
-        if not CIERRES_DIARIOS_FILE.exists():
-            return []
-        try:
-            contenido = json.loads(CIERRES_DIARIOS_FILE.read_text(encoding="utf-8"))
-            return contenido if isinstance(contenido, list) else []
-        except (OSError, json.JSONDecodeError):
-            return []
-
-    def guardar_cierres_diarios(contenido):
-        temporal = CIERRES_DIARIOS_FILE.with_suffix(".tmp")
-        temporal.write_text(json.dumps(contenido, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temporal, CIERRES_DIARIOS_FILE)
-
-    def fecha_a_date(valor):
-        for formato in ("%d/%m/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(str(valor or ""), formato).date()
-            except (ValueError, TypeError):
-                continue
-        return None
-
-    def numero_folio(valor):
-        try:
-            return int(str(valor or "").strip().rsplit("-", 1)[-1])
-        except (ValueError, TypeError):
-            return None
-
-    sucursales_cierre = SUCURSALES if es_global else [st.session_state.sucursal_asignada]
-    fecha_cierre = st.date_input("Fecha operativa del cierre", value=datetime.now().date(), key="fecha_reporte_cierre_diario")
-    sucursal_cierre = st.selectbox("Sucursal del reporte", sucursales_cierre, key="sucursal_reporte_cierre_diario")
-
-    registros_cierre = [
-        r for r in st.session_state.vehiculos
-        if r.get("sucursal") == sucursal_cierre and fecha_a_date(r.get("fecha")) == fecha_cierre
-    ]
-    gastos_cierre = []
-    if GASTOS_CIERRE_FILE.exists():
-        try:
-            datos_gastos = json.loads(GASTOS_CIERRE_FILE.read_text(encoding="utf-8"))
-            if isinstance(datos_gastos, list):
-                gastos_cierre = [
-                    g for g in datos_gastos
-                    if g.get("sucursal") == sucursal_cierre and fecha_a_date(g.get("fecha")) == fecha_cierre
-                ]
-        except (OSError, json.JSONDecodeError):
-            gastos_cierre = []
-
-    total_gastos_registrados = sum(dinero(g.get("importe")) for g in gastos_cierre)
-    pagos_confirmados_cierre = []
-    folios_pagados = set()
-    ingresos_confirmados_cierre = 0.0
-    for reg in registros_cierre:
-        pagos_reg = [pago for pago in reg.get("pagos", []) if pago.get("estado") == "Pagado"]
-        if pagos_reg:
-            for pago in pagos_reg:
-                pagos_confirmados_cierre.append(pago)
-                ingresos_confirmados_cierre += dinero(pago.get("importe"))
-            folios_pagados.add(reg.get("id"))
-        elif reg.get("pago_estado") == "Pagado":
-            folios_pagados.add(reg.get("id"))
-            ingresos_confirmados_cierre += dinero(reg.get("importe_cobrado", reg.get("tarifa", 0)))
-
-    cancelados_auto = sum(1 for r in registros_cierre if str(r.get("estado", "")).lower() in ("cancelado", "cancelada"))
-    perdidos_auto = sum(1 for r in registros_cierre if str(r.get("estado", "")).lower() in ("perdido", "perdida", "extraviado", "extraviada"))
-    pares_folios = [(numero_folio(r.get("id")), str(r.get("id", ""))) for r in registros_cierre]
-    pares_folios = [(n, folio) for n, folio in pares_folios if n is not None]
-    folio_inicial_default = min(pares_folios, key=lambda x: x[0])[1] if pares_folios else ""
-    folio_final_default = max(pares_folios, key=lambda x: x[0])[1] if pares_folios else ""
-    clave_widget_cierre = f"{sucursal_cierre}_{fecha_cierre:%Y%m%d}".replace(" ", "_")
-
-    st.markdown("#### Datos del turno y control de boletos")
-    st.caption("Los conteos se precargan desde los registros del sistema. Puedes corregirlos si hubo boletos físicos no capturados digitalmente.")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        fecha_precio = st.number_input(
-            "Costo unitario del boleto ($)", min_value=0.0,
-            value=float(PRECIOS_SUCURSALES.get(sucursal_cierre, 0)), step=5.0,
-            key=llave_unica(f"cierre_precio_{clave_widget_cierre}")
-        )
-        folio_inicial = st.text_input(
-            "Folio inicial de la sesión", value=folio_inicial_default,
-            key=llave_unica(f"cierre_folio_ini_{clave_widget_cierre}")
-        )
-    with c2:
-        folio_final = st.text_input(
-            "Folio final de la sesión", value=folio_final_default,
-            key=llave_unica(f"cierre_folio_fin_{clave_widget_cierre}")
-        )
-        total_boletos_auto = len(registros_cierre)
-        ni = numero_folio(folio_inicial)
-        nf = numero_folio(folio_final)
-        if ni is not None and nf is not None and nf >= ni:
-            total_boletos_auto = nf - ni + 1
-        total_boletos = st.number_input(
-            "Total de boletos utilizados", min_value=0, value=int(total_boletos_auto), step=1,
-            key=llave_unica(f"cierre_total_{clave_widget_cierre}")
-        )
-    with c3:
-        boletos_pagados = st.number_input(
-            "Boletos pagados", min_value=0, value=int(len(folios_pagados)), step=1,
-            key=llave_unica(f"cierre_pagados_{clave_widget_cierre}")
-        )
-        boletos_cancelados = st.number_input(
-            "Boletos cancelados", min_value=0, value=int(cancelados_auto), step=1,
-            key=llave_unica(f"cierre_cancelados_{clave_widget_cierre}")
-        )
-        boletos_perdidos = st.number_input(
-            "Boletos perdidos", min_value=0, value=int(perdidos_auto), step=1,
-            key=llave_unica(f"cierre_perdidos_{clave_widget_cierre}")
-        )
-
-    st.markdown("#### Gastos generales y balance")
-    st.write(f"**Gastos operativos ya registrados en el sistema:** ${total_gastos_registrados:,.2f} MXN")
-    st.caption("Si agregas un gasto adicional aquí, quedará en este cierre diario y no se duplicará en el catálogo de gastos operativos.")
-    colg1, colg2 = st.columns(2)
-    with colg1:
-        gasto_adicional = st.number_input(
-            "Gastos generales adicionales de este cierre ($)", min_value=0.0, value=0.0, step=50.0,
-            key=llave_unica(f"cierre_gasto_extra_{clave_widget_cierre}")
-        )
-    with colg2:
-        detalle_gasto_adicional = st.text_input(
-            "Concepto / observaciones de gastos", key=llave_unica(f"cierre_gasto_concepto_{clave_widget_cierre}")
-        )
-
-    total_gastos_cierre = total_gastos_registrados + float(gasto_adicional)
-    balance_cierre = ingresos_confirmados_cierre - total_gastos_cierre
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Vehículos registrados ese día", len(registros_cierre))
-    m2.metric("Ingresos confirmados", f"${ingresos_confirmados_cierre:,.2f}")
-    m3.metric("Gastos totales", f"${total_gastos_cierre:,.2f}")
-    m4.metric("Balance del día", f"${balance_cierre:,.2f}")
-    st.caption("El balance se calcula con cobros confirmados menos gastos registrados y gastos adicionales del cierre; los boletos cancelados/perdidos no se cuentan como cobros salvo que exista un pago confirmado.")
-
-    cierres_guardados = cargar_cierres_diarios()
-    cierre_existente = next((c for c in cierres_guardados if c.get("fecha") == str(fecha_cierre) and c.get("sucursal") == sucursal_cierre), None)
-    if cierre_existente:
-        st.warning(f"Ya existe un cierre para {sucursal_cierre} el {fecha_cierre}. Marca la casilla para reemplazarlo con los datos actuales.")
-    reemplazar_cierre = st.checkbox(
-        "Confirmo que deseo reemplazar el cierre existente de esta sucursal y fecha",
-        value=False, key=llave_unica(f"cierre_reemplazar_{clave_widget_cierre}"), disabled=not bool(cierre_existente)
-    )
-    if st.button("💾 Guardar cierre diario", type="primary", key=llave_unica(f"guardar_cierre_diario_{clave_widget_cierre}")):
-        if not folio_inicial.strip() or not folio_final.strip():
-            st.error("Captura el folio inicial y el folio final de la sesión.")
-        elif int(boletos_pagados) + int(boletos_cancelados) + int(boletos_perdidos) > int(total_boletos):
-            st.error("La suma de boletos pagados, cancelados y perdidos no puede superar el total de boletos utilizados.")
-        elif cierre_existente and not reemplazar_cierre:
-            st.error("El cierre ya existe. Marca la casilla de reemplazo si realmente necesitas corregirlo.")
-        else:
-            cierre = {
-                "id": cierre_existente.get("id") if cierre_existente else uuid.uuid4().hex[:12].upper(),
-                "fecha": str(fecha_cierre),
-                "sucursal": sucursal_cierre,
-                "costo_unitario_boleto": float(fecha_precio),
-                "folio_inicial": folio_inicial.strip(),
-                "folio_final": folio_final.strip(),
-                "total_boletos": int(total_boletos),
-                "boletos_pagados": int(boletos_pagados),
-                "boletos_cancelados": int(boletos_cancelados),
-                "boletos_perdidos": int(boletos_perdidos),
-                "ingresos_confirmados": round(ingresos_confirmados_cierre, 2),
-                "gastos_operativos_registrados": round(total_gastos_registrados, 2),
-                "gastos_generales_adicionales": round(float(gasto_adicional), 2),
-                "concepto_gastos_adicionales": detalle_gasto_adicional.strip(),
-                "gastos_totales": round(total_gastos_cierre, 2),
-                "balance_neto": round(balance_cierre, 2),
-                "usuario": st.session_state.usuario_autenticado,
-                "rol": st.session_state.rol,
-                "guardado_en": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            }
-            if cierre_existente:
-                cierres_guardados = [cierre if c.get("id") == cierre_existente.get("id") else c for c in cierres_guardados]
-            else:
-                cierres_guardados.insert(0, cierre)
-            try:
-                guardar_cierres_diarios(cierres_guardados)
-                guardar_evento_auditoria("CIERRE DIARIO POR SUCURSAL", f"{sucursal_cierre} · {fecha_cierre} · ingresos ${ingresos_confirmados_cierre:.2f} · gastos ${total_gastos_cierre:.2f} · balance ${balance_cierre:.2f}")
-                st.success("Cierre diario guardado. Ya puedes descargar la hoja de cálculo para entregar el balance.")
-                st.rerun()
-            except OSError as exc:
-                st.error(f"No se pudo guardar el cierre diario: {exc}")
-
-    st.divider()
-    st.markdown("#### Historial y entrega de hoja de cálculo")
-    cierres_guardados = cargar_cierres_diarios()
-    cierres_visibles = cierres_guardados if es_global else [c for c in cierres_guardados if c.get("sucursal") == st.session_state.sucursal_asignada]
-    if cierres_visibles:
-        df_cierres = pd.DataFrame(cierres_visibles)
-        columnas_mostrar_cierres = [
-            "fecha", "sucursal", "costo_unitario_boleto", "folio_inicial", "folio_final",
-            "total_boletos", "boletos_pagados", "boletos_cancelados", "boletos_perdidos",
-            "ingresos_confirmados", "gastos_totales", "balance_neto", "usuario", "guardado_en"
-        ]
-        st.dataframe(df_cierres.reindex(columns=columnas_mostrar_cierres), use_container_width=True, hide_index=True)
-        opciones_cierre = {
-            f"{c.get('fecha')} · {c.get('sucursal')} · Balance ${dinero(c.get('balance_neto')):,.2f}": c
-            for c in cierres_visibles
-        }
-        etiqueta_cierre = st.selectbox("Selecciona el cierre que vas a entregar", list(opciones_cierre.keys()), key="seleccionar_cierre_descarga")
-        cierre_descarga = opciones_cierre[etiqueta_cierre]
-        fecha_exportacion = fecha_a_date(cierre_descarga.get("fecha"))
-        registros_excel_cierre = [
-            r for r in st.session_state.vehiculos
-            if r.get("sucursal") == cierre_descarga.get("sucursal")
-            and fecha_a_date(r.get("fecha")) == fecha_exportacion
-        ]
-        gastos_excel_cierre = []
-        if GASTOS_CIERRE_FILE.exists():
-            try:
-                gastos_archivo_excel = json.loads(GASTOS_CIERRE_FILE.read_text(encoding="utf-8"))
-                if isinstance(gastos_archivo_excel, list):
-                    gastos_excel_cierre = [
-                        g for g in gastos_archivo_excel
-                        if g.get("sucursal") == cierre_descarga.get("sucursal")
-                        and fecha_a_date(g.get("fecha")) == fecha_exportacion
-                    ]
-            except (OSError, json.JSONDecodeError):
-                gastos_excel_cierre = []
-        salida_excel = io.BytesIO()
-        df_resumen_cierre = pd.DataFrame([{
-            "Fecha": cierre_descarga.get("fecha"),
-            "Sucursal": cierre_descarga.get("sucursal"),
-            "Costo unitario boleto ($)": cierre_descarga.get("costo_unitario_boleto"),
-            "Folio inicial": cierre_descarga.get("folio_inicial"),
-            "Folio final": cierre_descarga.get("folio_final"),
-            "Total boletos": cierre_descarga.get("total_boletos"),
-            "Boletos pagados": cierre_descarga.get("boletos_pagados"),
-            "Boletos cancelados": cierre_descarga.get("boletos_cancelados"),
-            "Boletos perdidos": cierre_descarga.get("boletos_perdidos"),
-            "Ingresos confirmados ($)": cierre_descarga.get("ingresos_confirmados"),
-            "Gastos operativos registrados ($)": cierre_descarga.get("gastos_operativos_registrados"),
-            "Gastos generales adicionales ($)": cierre_descarga.get("gastos_generales_adicionales"),
-            "Concepto gastos adicionales": cierre_descarga.get("concepto_gastos_adicionales"),
-            "Gastos totales ($)": cierre_descarga.get("gastos_totales"),
-            "Balance neto ($)": cierre_descarga.get("balance_neto"),
-            "Elaboró": cierre_descarga.get("usuario"),
-            "Rol": cierre_descarga.get("rol"),
-            "Fecha/hora de elaboración": cierre_descarga.get("guardado_en"),
-        }])
-        try:
-            with pd.ExcelWriter(salida_excel, engine="openpyxl") as writer:
-                df_resumen_cierre.to_excel(writer, sheet_name="Cierre diario", index=False, startrow=2)
-                ws = writer.sheets["Cierre diario"]
-                ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(df_resumen_cierre.columns))
-                ws.cell(row=1, column=1, value="CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V. — CIERRE DIARIO")
-                ws.cell(row=1, column=1).font = openpyxl.styles.Font(bold=True, size=14, color="FFFFFF")
-                ws.cell(row=1, column=1).fill = openpyxl.styles.PatternFill("solid", fgColor="1F4E78")
-                ws.freeze_panes = "A4"
-                ws.auto_filter.ref = f"A3:{openpyxl.utils.get_column_letter(len(df_resumen_cierre.columns))}4"
-                for col_cells in ws.columns:
-                    max_len = max(len(str(cell.value or "")) for cell in col_cells)
-                    ws.column_dimensions[openpyxl.utils.get_column_letter(col_cells[0].column)].width = min(max(max_len + 2, 14), 36)
-                ws.append([])
-                ws.append(["Detalle de gastos operativos registrados en la sucursal y fecha"])
-                ws.append(["Categoría", "Concepto", "Importe ($)", "Registrado por"])
-                for gasto in gastos_excel_cierre:
-                    ws.append([gasto.get("categoria", ""), gasto.get("concepto", ""), dinero(gasto.get("importe")), gasto.get("registrado_por", "")])
-                ws2 = writer.book.create_sheet("Boletos del día")
-                ws2.append(["Folio", "Fecha de entrada", "Sucursal", "Tarifa ($)", "Estado", "Pagado ($)"])
-                for reg in registros_excel_cierre:
-                    pagado_reg = sum(dinero(p.get("importe")) for p in reg.get("pagos", []) if p.get("estado") == "Pagado")
-                    if not reg.get("pagos") and reg.get("pago_estado") == "Pagado":
-                        pagado_reg = dinero(reg.get("importe_cobrado", reg.get("tarifa", 0)))
-                    ws2.append([reg.get("id", ""), reg.get("fecha", ""), reg.get("sucursal", ""), dinero(reg.get("tarifa")), reg.get("estado", ""), pagado_reg])
-                ws2.freeze_panes = "A2"
-                ws2.auto_filter.ref = f"A1:F{max(ws2.max_row, 1)}"
-                for col in ws2.columns:
-                    max_len = max(len(str(cell.value or "")) for cell in col)
-                    ws2.column_dimensions[openpyxl.utils.get_column_letter(col[0].column)].width = min(max(max_len + 2, 14), 34)
-            st.download_button(
-                "📥 Descargar cierre diario en Excel (.xlsx)",
-                data=salida_excel.getvalue(),
-                file_name=f"ClubPark_Cierre_{cierre_descarga.get('sucursal','Sucursal').replace(' ','_')}_{cierre_descarga.get('fecha','')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="descargar_excel_cierre_diario",
-            )
-            st.download_button(
-                "📄 Descargar cierre diario en CSV",
-                data=df_resumen_cierre.to_csv(index=False).encode("utf-8-sig"),
-                file_name=f"ClubPark_Cierre_{cierre_descarga.get('fecha','')}.csv",
-                mime="text/csv",
-                key="descargar_csv_cierre_diario",
-            )
-        except Exception as exc:
-            st.error(f"No se pudo preparar el Excel del cierre diario: {exc}")
-            st.info("Confirma que openpyxl esté instalado en requirements.txt.")
-    else:
-        st.info("Todavía no hay cierres diarios guardados para esta sucursal.")
-
-
-# ---------------------------------------------------------------------
-# TAB 3: REIMPRESIÓN
-# ---------------------------------------------------------------------
-with tab_imp:
-    encabezado_institucional("RE-IMPRESIÓN TÉRMICA DE TICKETS", "IMPRESIÓN ESC/POS", "Reemisión de boletos y llaveros con el folio original")
-    panel_prueba_impresion(key_sufijo="reimpresion", expandido=False)
-    panel_reintentos_impresion(expandido=True, sufijo_panel="reimp")
-    visibles = vehiculos_visibles(st.session_state.vehiculos)
-    if not visibles:
-        st.info("No hay tickets disponibles.")
-    else:
-        folio_imp = st.selectbox(
-            "Selecciona folio a imprimir",
-            [r.get("id", "") for r in visibles],
-            key="folio_reimpresion",
-        )
-        registro_imp = next((r for r in visibles if r.get("id") == folio_imp), None)
-        if registro_imp:
-            ticket = registro_imp.get("ticket_texto") or crear_ticket(registro_imp)
-            st.markdown("**Las dos impresiones son independientes.**")
-            vista_impresion_con_qr(registro_imp, "cliente", "imprimir_cliente_reimp")
-            vista_impresion_con_qr(registro_imp, "llavero", "imprimir_contrasena_reimp")
-            imprimir_partes_ticket(registro_imp, "reimpresion")
-            st.download_button(
-                "📄 Descargar ticket completo TXT",
-                data=ticket.encode("utf-8"),
-                file_name=f"ticket_{folio_imp}.txt",
-                mime="text/plain",
-                use_container_width=True,
-            )
-            if QR_OK:
-                qr_data = generar_qr_bytes(registro_imp)
-                st.image(qr_data, caption="QR único para localizar el vehículo", width=160)
-                st.download_button(
-                    "⬇️ Descargar QR del vehículo",
-                    data=qr_data,
-                    file_name=f"QR_{folio_imp}.png",
-                    mime="image/png",
-                    key=f"qr_reimp_{folio_imp}",
-                )
-
-
-# ---------------------------------------------------------------------
-# TAB 4: REPORTES Y EXCEL
-# ---------------------------------------------------------------------
-with tab_rep:
-    encabezado_institucional("REPORTE OPERATIVO Y EXCEL OFICIAL", "DOCUMENTACIÓN", "Exportación institucional para dirección y contaduría")
-    visibles = vehiculos_visibles(st.session_state.vehiculos)
-    if not visibles:
-        st.info("No hay registros para generar un reporte.")
-    else:
-        df_rep = pd.DataFrame(visibles)
-        if "fecha" in df_rep.columns:
-            fechas = df_rep["fecha"].fillna("").astype(str)
-            opciones_sucursal = ["Todas"] + sorted(df_rep["sucursal"].dropna().astype(str).unique().tolist())
-            filtro_sucursal = st.selectbox("Filtrar por sucursal", opciones_sucursal, key="rep_sucursal")
-            if filtro_sucursal != "Todas":
-                df_rep = df_rep[df_rep["sucursal"] == filtro_sucursal]
-            st.metric("Vehículos en el reporte", len(df_rep))
-            ingresos = pd.to_numeric(df_rep.get("tarifa", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
-            st.metric("Suma de tarifas registradas", f"${ingresos:,.2f} MXN")
-            st.dataframe(
-                df_rep.reindex(columns=["id", "fecha", "sucursal", "marca", "placas", "tarifa", "operador", "estado"]),
-                use_container_width=True,
-                hide_index=True,
-            )
-            try:
-                excel_data = generar_excel_oficial(df_rep)
-                st.download_button(
-                    "📥 Descargar Excel Oficial",
-                    data=excel_data.getvalue(),
-                    file_name=f"Club_Park_Reporte_{datetime.now():%Y%m%d_%H%M}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                )
-            except Exception as exc:
-                st.error(f"No se pudo generar el Excel: {exc}")
-                st.info("Verifica requirements.txt y vuelve a desplegar la aplicación.")
-            csv_data = df_rep.to_csv(index=False).encode("utf-8-sig")
-            st.download_button(
-                "📥 Descargar respaldo CSV",
-                data=csv_data,
-                file_name=f"Club_Park_Reporte_{datetime.now():%Y%m%d_%H%M}.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-
-
-# ---------------------------------------------------------------------
-# TAB 5: AUDITORÍA Y WHATSAPP
-# ---------------------------------------------------------------------
-with tab_aud:
-    encabezado_institucional("AUDITORÍA Y COMUNICACIÓN", "GOBIERNO DEL SISTEMA", "Bitácora de altas, cobros, salidas y cierres con usuario y fecha")
-    visibles = vehiculos_visibles(st.session_state.vehiculos)
-    total = len(visibles)
-    entregados = sum(1 for r in visibles if r.get("estado") == "Entregado")
-    resguardo = sum(1 for r in visibles if r.get("estado", "En Resguardo") == "En Resguardo")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Registros visibles", total)
-    c2.metric("En resguardo", resguardo)
-    c3.metric("Entregados", entregados)
-
-    if visibles:
-        st.markdown("#### Revisión de registros")
-        df_aud = pd.DataFrame(visibles)
-        sucursales_aud = ["Todas"] + sorted(df_aud["sucursal"].dropna().astype(str).unique().tolist())
-        suc_aud = st.selectbox("Sucursal para auditar", sucursales_aud, key="aud_sucursal")
-        if suc_aud != "Todas":
-            df_aud = df_aud[df_aud["sucursal"] == suc_aud]
-        st.dataframe(
-            df_aud.reindex(columns=["id", "fecha", "sucursal", "marca", "placas", "tarifa", "operador", "estado"]),
-            use_container_width=True,
-            hide_index=True,
-        )
-
-        st.markdown("#### Validación de las cuatro fotografías")
-        for registro in visibles[:100]:
-            faltan = []
-            for vista in ("frente", "izquierda", "derecha", "trasera"):
-                if not ruta_foto(registro, vista):
-                    faltan.append(vista)
-            if faltan:
-                st.warning(f"{registro.get('id')} — faltan/no están disponibles: {', '.join(faltan)}")
-
-    st.divider()
-    st.markdown("#### Enviar recordatorio por WhatsApp")
-    st.caption("El enlace abre WhatsApp con el texto preparado; debes revisar y enviarlo manualmente.")
-    telefono = st.text_input("Teléfono con clave de país o celular mexicano de 10 dígitos", key="wa_telefono")
-    mensaje = st.text_area(
-        "Mensaje",
-        value="Buen día. Favor de revisar y completar los registros operativos pendientes de CLUB PARK.",
-        key="wa_mensaje",
-    )
-    if telefono.strip():
-        st.link_button(
-            "💬 Abrir WhatsApp con mensaje",
-            enlace_whatsapp(telefono, mensaje),
-            use_container_width=True,
-        )
-
-    if es_contador:
-        st.divider()
-        st.markdown("#### Respaldo independiente de cobros")
-        st.caption("Cada cobro guardado queda también en pagos_registrados.json, separado de la ficha del vehículo. Descarga una copia periódicamente y guárdala fuera del servidor.")
-        pagos_respaldo = cargar_pagos_respaldo()
-        st.metric("Cobros en libro de respaldo", len(pagos_respaldo))
-        if pagos_respaldo:
-            df_pagos_respaldo = pd.DataFrame(pagos_respaldo)
-            st.dataframe(df_pagos_respaldo, use_container_width=True, hide_index=True)
-            st.download_button(
-                "⬇️ Descargar respaldo de cobros (JSON)",
-                data=json.dumps(pagos_respaldo, ensure_ascii=False, indent=2).encode("utf-8"),
-                file_name=f"ClubPark_Respaldo_Cobros_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json",
-                key="descargar_respaldo_cobros_json",
-            )
-            st.download_button(
-                "📊 Descargar libro de cobros (CSV)",
-                data=df_pagos_respaldo.to_csv(index=False).encode("utf-8-sig"),
-                file_name=f"ClubPark_Cobros_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                key="descargar_respaldo_cobros_csv",
-            )
-        else:
-            st.info("Todavía no hay cobros en el libro de respaldo. Los siguientes cobros se registrarán aquí.")
-
-        st.divider()
-        st.markdown("#### Conteo y consecutivo de folios por sucursal")
-        st.caption("Cada sucursal tiene un prefijo exclusivo. El consecutivo continúa al día siguiente y no se reinicia al cerrar caja.")
-        config_folios = cargar_config()
-        resumen_folios = []
-        for sucursal_folio_resumen in SUCURSALES:
-            maximo_folio_resumen = siguiente_numero_usado(sucursal_folio_resumen, st.session_state.vehiculos)
-            siguiente_configurado_resumen = int(config_folios["siguiente_folio"].get(sucursal_folio_resumen, 1))
-            resumen_folios.append({
-                "Sucursal": sucursal_folio_resumen,
-                "Prefijo exclusivo": f"CP-{codigo_sucursal(sucursal_folio_resumen)}-",
-                "Último consecutivo utilizado": maximo_folio_resumen,
-                "Siguiente consecutivo": max(siguiente_configurado_resumen, maximo_folio_resumen + 1),
-                "Vehículos registrados": sum(1 for reg in st.session_state.vehiculos if reg.get("sucursal") == sucursal_folio_resumen),
-            })
-        st.dataframe(pd.DataFrame(resumen_folios), use_container_width=True, hide_index=True)
-        st.markdown("#### Configuración de folios por sucursal")
-        st.caption("Define el siguiente consecutivo. El sistema nunca bajará del máximo ya utilizado en esa sucursal para evitar reutilizar folios.")
-        suc_folio_admin = st.selectbox("Sucursal para configurar folio", SUCURSALES, key="admin_sucursal_folio")
-        valor_actual = int(config_folios["siguiente_folio"].get(suc_folio_admin, 1))
-        st.write(f"**Siguiente folio configurado:** {valor_actual}")
-        nuevo_inicio = st.number_input(
-            "Número del siguiente folio",
-            min_value=1,
-            value=max(1, valor_actual),
-            step=1,
-            key="admin_nuevo_inicio_folio",
-        )
-        if st.button("💾 Guardar siguiente folio", type="primary", key="guardar_folio_sucursal"):
-            maximo_usado = siguiente_numero_usado(suc_folio_admin, st.session_state.vehiculos)
-            if int(nuevo_inicio) <= maximo_usado:
-                st.error(f"No se puede iniciar en {int(nuevo_inicio)}: ya existe un folio de esta sucursal hasta {maximo_usado}. Usa al menos {maximo_usado + 1}.")
-            else:
-                anterior = int(config_folios["siguiente_folio"].get(suc_folio_admin, 1))
-                config_folios["siguiente_folio"][suc_folio_admin] = int(nuevo_inicio)
-                config_folios.setdefault("historial_folios", []).insert(0, {
-                    "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "usuario": st.session_state.usuario_autenticado,
-                    "sucursal": suc_folio_admin,
-                    "anterior": anterior,
-                    "nuevo": int(nuevo_inicio),
-                })
-                try:
-                    guardar_config(config_folios)
-                    guardar_evento_auditoria("CAMBIO DE FOLIO", f"{suc_folio_admin}: {anterior} -> {int(nuevo_inicio)}")
-                    st.success("Siguiente folio actualizado y cambio registrado en auditoría.")
-                    st.rerun()
-                except OSError as exc:
-                    st.error(f"No se pudo guardar la configuración: {exc}")
-
-        st.markdown("#### Historial de cambios de folios")
-        historial_folios = cargar_config().get("historial_folios", [])
-        if historial_folios:
-            st.dataframe(pd.DataFrame(historial_folios), use_container_width=True, hide_index=True)
-        else:
-            st.info("Todavía no hay cambios manuales de folio.")
-
-        st.markdown("#### Reinicio administrativo de datos operativos")
-        st.warning(
-            "Esta herramienta es exclusiva del Contador Auditor. Antes de reiniciar, descarga el respaldo. "
-            "El historial de auditoría se conserva y los consecutivos no se reinician salvo que marques la opción correspondiente."
-        )
-        cierres_file_admin = DATA_DIR / "cierres_diarios_sucursal.json"
-        gastos_file_admin = DATA_DIR / "gastos_operativos.json"
-        cortes_file_admin = DATA_DIR / "cortes_caja.json"
-        config_admin_backup = cargar_config()
-        # Blindaje institucional: los respaldos siempre quedan definidos antes de los
-        # intentos de lectura, de modo que ninguna ruta de ejecución llegue al
-        # diccionario de respaldo con nombres sin definir (NameError).
-        cierres_admin_backup = []
-        gastos_admin_backup = []
-        cortes_admin_backup = []
-        try:
-            cierres_admin_backup = json.loads(cierres_file_admin.read_text(encoding="utf-8")) if cierres_file_admin.exists() else []
-        except (OSError, json.JSONDecodeError):
-            cierres_admin_backup = []
-        try:
-            gastos_admin_backup = json.loads(gastos_file_admin.read_text(encoding="utf-8")) if gastos_file_admin.exists() else []
-        except (OSError, json.JSONDecodeError):
-            gastos_admin_backup = []
-        try:
-            cortes_admin_backup = json.loads(cortes_file_admin.read_text(encoding="utf-8")) if cortes_file_admin.exists() else []
-        except (OSError, json.JSONDecodeError):
-            cortes_admin_backup = []
-        respaldo_admin = {
-            "generado_en": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "vehiculos": st.session_state.vehiculos,
-            "cierres_diarios": cierres_admin_backup,
-            "gastos_operativos": gastos_admin_backup,
-            "cortes_caja": cortes_admin_backup,
-            "configuracion_folios": config_admin_backup,
-        }
-        st.download_button(
-            "📦 Descargar respaldo antes de reiniciar",
-            data=json.dumps(respaldo_admin, ensure_ascii=False, indent=2).encode("utf-8"),
-            file_name=f"respaldo_clubpark_{datetime.now():%Y%m%d_%H%M%S}.json",
-            mime="application/json",
-            key="descargar_respaldo_antes_reinicio",
-        )
-        alcance_reinicio = st.radio(
-            "Alcance del reinicio",
-            ["Solo una sucursal", "Toda la aplicación"],
-            horizontal=True,
-            key="alcance_reinicio_admin",
-        )
-        sucursal_reinicio = st.selectbox(
-            "Sucursal que se reiniciará",
-            SUCURSALES,
-            key="sucursal_reinicio_admin",
-            disabled=alcance_reinicio == "Toda la aplicación",
-        )
-        reiniciar_folios = st.checkbox(
-            "También reiniciar el consecutivo de folios a 1 (puede reutilizar números históricos)",
-            value=False,
-            key="reiniciar_folios_admin",
-        )
-        texto_confirmacion = "REINICIAR TODO" if alcance_reinicio == "Toda la aplicación" else f"REINICIAR {sucursal_reinicio}"
-        
-        def normalizar_confirmacion(txt):
-            import unicodedata
-            t = unicodedata.normalize('NFKD', str(txt or '')).encode('ASCII', 'ignore').decode('ASCII')
-            return re.sub(r'[^A-Z0-9]', '', t.upper())
-
-        col_conf1, col_conf2 = st.columns([2, 1])
-        with col_conf1:
-            confirmacion_reinicio = st.text_input(
-                f'Para confirmar, escribe: {texto_confirmacion}',
-                key="texto_confirmacion_reinicio_admin",
-                placeholder=texto_confirmacion
-            )
-        with col_conf2:
-            st.write("")
-            st.write("")
-            check_autorizar_directo = st.checkbox(
-                "✅ Autorizar reinicio",
-                key="check_autorizar_reinicio_directo",
-                help="Activa esta casilla para habilitar el botón de reinicio sin preocuparte por acentos o mayúsculas."
-            )
-
-        coincide_texto = normalizar_confirmacion(confirmacion_reinicio) == normalizar_confirmacion(texto_confirmacion)
-        puede_reiniciar = coincide_texto or check_autorizar_directo
-
-        if not puede_reiniciar:
-            st.info(f"💡 Escribe exactamente `{texto_confirmacion}` o marca la casilla 'Autorizar reinicio' para activar el botón.")
-
-        if st.button(
-            "🧹 Reiniciar datos operativos seleccionados",
-            type="primary" if puede_reiniciar else "secondary",
-            disabled=not puede_reiniciar,
-            key="ejecutar_reinicio_admin",
-        ):
-            reiniciar_todo = alcance_reinicio == "Toda la aplicación"
-            sucursales_objetivo = set(SUCURSALES if reiniciar_todo else [sucursal_reinicio])
-            registros_borrados = [r for r in st.session_state.vehiculos if r.get("sucursal") in sucursales_objetivo]
-            registros_conservar = [r for r in st.session_state.vehiculos if r.get("sucursal") not in sucursales_objetivo]
-            fotos_borradas = 0
-            for registro_borrado in registros_borrados:
-                rutas = []
-                for vista in ("frente", "izquierda", "derecha", "trasera"):
-                    ruta = ruta_foto(registro_borrado, vista)
-                    if ruta:
-                        rutas.append(ruta)
-                for ruta_extra in registro_borrado.get("fotos_custodia", []) or []:
-                    try:
-                        ruta = Path(ruta_extra)
-                        if not ruta.is_absolute():
-                            ruta = DATA_DIR / ruta
-                        rutas.append(ruta)
-                    except (TypeError, ValueError):
-                        pass
-                for ruta in rutas:
-                    try:
-                        if ruta.exists() and ruta.is_file():
-                            ruta.unlink()
-                            fotos_borradas += 1
-                    except OSError:
-                        pass
-            if guardar_bd(registros_conservar):
-                st.session_state.vehiculos = registros_conservar
-                for archivo_datos, lista_datos in (
-                    (cierres_file_admin, cierres_admin_backup),
-                    (gastos_file_admin, gastos_admin_backup),
-                    (cortes_file_admin, cortes_admin_backup),
-                ):
-                    if reiniciar_todo:
-                        filtrados = []
-                    else:
-                        filtrados = [d for d in lista_datos if d.get("sucursal") not in sucursales_objetivo]
-                    try:
-                        archivo_datos.write_text(json.dumps(filtrados, ensure_ascii=False, indent=2), encoding="utf-8")
-                    except OSError as exc:
-                        st.error(f"No se pudo actualizar {archivo_datos.name}: {exc}")
-                if reiniciar_folios:
-                    config_nueva = cargar_config()
-                    for suc in sucursales_objetivo:
-                        anterior = int(config_nueva["siguiente_folio"].get(suc, 1))
-                        config_nueva["siguiente_folio"][suc] = 1
-                        config_nueva.setdefault("historial_folios", []).insert(0, {
-                            "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "usuario": st.session_state.usuario_autenticado,
-                            "sucursal": suc,
-                            "anterior": anterior,
-                            "nuevo": 1,
-                            "motivo": "Reinicio administrativo de datos",
-                        })
-                    guardar_config(config_nueva)
-                guardar_evento_auditoria(
-                    "REINICIO ADMINISTRATIVO",
-                    f"Alcance: {'todas las sucursales' if reiniciar_todo else sucursal_reinicio}; "
-                    f"registros eliminados: {len(registros_borrados)}; fotos eliminadas: {fotos_borradas}; "
-                    f"reinicio de folios: {'sí' if reiniciar_folios else 'no'}",
-                )
-                ultimo_comprobante = st.session_state.get("ultimo_comprobante_cobro", {})
-                sucursal_comprobante = (ultimo_comprobante.get("registro") or {}).get("sucursal")
-                if reiniciar_todo or sucursal_comprobante in sucursales_objetivo:
-                    st.session_state.pop("ultimo_comprobante_cobro", None)
-                ultimo_folio_sesion = st.session_state.get("ultimo_folio")
-                if any(r.get("id") == ultimo_folio_sesion for r in registros_borrados):
-                    st.session_state.pop("ultimo_folio", None)
-                st.success(
-                    f"Reinicio terminado. Registros eliminados: {len(registros_borrados)}; "
-                    f"fotografías eliminadas: {fotos_borradas}. El historial de auditoría se conservó."
-                )
-                st.rerun()
-
-        st.markdown("#### Administración de registros")
-        st.warning("Eliminar un registro es una acción permanente. Descarga un reporte antes de continuar.")
-        ids = [r.get("id", "") for r in st.session_state.vehiculos]
-        if ids:
-            id_borrar = st.selectbox("Folio para eliminar", ids, key="aud_borrar_id")
-            confirmar = st.checkbox("Confirmo que deseo eliminar este registro y sus fotografías.")
-            if st.button("🗑️ Eliminar registro seleccionado", type="secondary", disabled=not confirmar):
-                registro = next((r for r in st.session_state.vehiculos if r.get("id") == id_borrar), None)
-                if registro:
-                    for vista in ("frente", "izquierda", "derecha", "trasera"):
-                        p = ruta_foto(registro, vista)
-                        if p:
-                            try:
-                                p.unlink()
-                            except OSError:
-                                pass
-                    st.session_state.vehiculos = [
-                        r for r in st.session_state.vehiculos if r.get("id") != id_borrar
-                    ]
-                    if guardar_bd(st.session_state.vehiculos):
-                        st.success(f"Registro {id_borrar} eliminado.")
-                        st.rerun()
-
-st.sidebar.caption(
-    "Datos guardados en: " + str(DATA_DIR) +
-    "\n\nEn Streamlit Cloud, configura almacenamiento persistente externo para evitar pérdidas."
-)
-
-
-# ---------------------------------------------------------------------
-# REGISTRO DE AUDITORÍA (eventos recientes)
-# ---------------------------------------------------------------------
-if es_contador:
-    st.divider()
-    st.subheader("Historial de auditoría del sistema")
-    st.caption(
-        "Bitácora institucional: registra altas, cobros, salidas, cierres, cambios de folio e impresión, "
-        "con usuario, rol, fecha y detalle del cambio."
-    )
-    eventos = cargar_auditoria()
-    if eventos:
-        col_f1, col_f2, col_f3 = st.columns(3)
-        tipos = ["Todos"] + sorted({str(e.get("tipo", "OTRO")) for e in eventos})
-        usuarios = ["Todos"] + sorted({str(e.get("usuario", "Sistema")) for e in eventos})
-        filtro_tipo = col_f1.selectbox("Filtrar por evento", tipos, key="aud_filtro_tipo")
-        filtro_usuario = col_f2.selectbox("Filtrar por usuario", usuarios, key="aud_filtro_usuario")
-        busqueda = col_f3.text_input("Buscar en el detalle", key="aud_busqueda").strip().lower()
-        eventos_filtrados = eventos
-        if filtro_tipo != "Todos":
-            eventos_filtrados = [e for e in eventos_filtrados if str(e.get("tipo", "OTRO")) == filtro_tipo]
-        if filtro_usuario != "Todos":
-            eventos_filtrados = [e for e in eventos_filtrados if str(e.get("usuario", "Sistema")) == filtro_usuario]
-        if busqueda:
-            eventos_filtrados = [e for e in eventos_filtrados if busqueda in json.dumps(e, ensure_ascii=False).lower()]
-        st.metric("Eventos en la bitácora", len(eventos_filtrados))
-        st.dataframe(pd.DataFrame(eventos_filtrados), use_container_width=True, hide_index=True)
-        st.download_button(
-            "📥 Descargar bitácora de auditoría (CSV)",
-            data=pd.DataFrame(eventos_filtrados).to_csv(index=False).encode("utf-8-sig"),
-            file_name=f"Bitacora_Auditoria_ClubPark_{datetime.now():%Y%m%d_%H%M}.csv",
-            mime="text/csv",
-            key="descargar_bitacora_auditoria",
-        )
-    else:
-        st.info("La bitácora registrará aquí altas, cobros, salidas, cierres y cambios de folios.")
-
-
-# ---------------------------------------------------------------------
-# TAB 10: CREDENCIALES Y CÓDIGOS QR INSTITUCIONALES
-# ---------------------------------------------------------------------
-with tab_qrs:
-    if es_contador:
-        st.markdown(f"""
-        <div class="clubpark-header-card">
-          <div class="clubpark-badge" style="margin-top:4px">CATÁLOGO OFICIAL DE ACCESOS Y CREDENCIALES</div>
-          <h3 style="color:#FFFFFF !important;margin:6px 0 2px 0">CÓDIGOS QR OFICIALES DE SUCURSALES Y SUPERVISIÓN</h3>
-          <div style="font-size:13px;color:#EBF3EE">
-            CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V. &nbsp;|&nbsp; Color Institucional: Verde Botella (#0B3B24)
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.write(
-            "A continuación se presentan todas las credenciales QR para el Contador Auditor, "
-            "los Supervisores Globales y los Encargados de las 23 sucursales operativas. "
-            "Puedes descargar individualmente cada código QR o descargarlos todos juntos en un archivo ZIP."
-        )
-
-        if ACCESOS_FUENTE == "por_defecto":
-            st.warning(
-                "⚠️ **Credenciales en modo contingencia:** los tokens por defecto todavía viven en el código fuente. "
-                "Muévelos a `.streamlit/secrets.toml` (clave `CLUBPARK_TOKENS`) y gírelos de vez en cuando. "
-                "Consulta la guía de implementación adjunta."
-            )
-        else:
-            st.success(
-                "✅ Credenciales protegidas: se cargan desde "
-                + ("Streamlit Secrets" if ACCESOS_FUENTE == "secrets" else "variables de entorno")
-                + " y no están expuestas en el código fuente."
-            )
-
-        # Paquete ZIP completo generado en memoria (sin rutas de máquina de desarrollo)
-        if QR_OK and qrcode:
-            buffer_zip = io.BytesIO()
-            with zipfile.ZipFile(buffer_zip, "w", zipfile.ZIP_DEFLATED) as archivo_zip:
-                for token_zip in ACCESOS:
-                    qr_zip = qrcode.QRCode(version=1, box_size=8, border=2)
-                    qr_zip.add_data(contenido_qr_para(token_zip))
-                    qr_zip.make(fit=True)
-                    imagen_zip = qr_zip.make_image(fill_color="#0B3B24", back_color="#FFFFFF")
-                    buffer_imagen = io.BytesIO()
-                    imagen_zip.save(buffer_imagen, format="PNG")
-                    archivo_zip.writestr(f"QR_{token_zip}.png", buffer_imagen.getvalue())
-            st.download_button(
-                f"📦 Descargar paquete completo de {len(ACCESOS)} Códigos QR (ZIP)",
-                data=buffer_zip.getvalue(),
-                file_name="Credenciales_QR_ClubPark_Completas.zip",
-                mime="application/zip",
-                use_container_width=True,
-                type="primary",
-                key="descargar_todos_qrs_zip",
-            )
-        if APP_URL:
-            st.info(f"Los QR incluyen el enlace de acceso directo: {APP_URL} — al escanearlos con la cámara del teléfono la sesión se abre sola.")
-
-        filtro_rol = st.radio(
-            "Filtrar catálogo:",
-            ["Todos (26 credenciales)", "Auditoría y Supervisión Global", "Encargados de Sucursal"],
-            horizontal=True,
-            key="filtro_credenciales_qr"
-        )
-
-        # Filtrar tokens
-        tokens_mostrar = {}
-        for tok, data in ACCESOS.items():
-            es_sup = "Global" in data.get("rol", "") or "Auditor" in data.get("rol", "")
-            if filtro_rol == "Auditoría y Supervisión Global" and not es_sup:
-                continue
-            if filtro_rol == "Encargados de Sucursal" and es_sup:
-                continue
-            tokens_mostrar[tok] = data
-
-        cols = st.columns(3)
-        for idx, (tok, data) in enumerate(tokens_mostrar.items()):
-            col = cols[idx % 3]
-            with col:
-                st.markdown(f"""
-                <div style="border:2px solid #0B3B24;border-radius:10px;padding:12px;background:#FFFFFF;margin-bottom:14px;box-shadow:0 3px 8px rgba(11,59,36,0.12)">
-                  <div style="background:#0B3B24;color:#FFFFFF;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;margin-bottom:8px;text-align:center">
-                    {data.get('rol', 'Supervisor')}
-                  </div>
-                  <div style="font-size:14px;font-weight:800;color:#0B3B24;text-align:center">{data.get('nombre', '')}</div>
-                  <div style="font-size:12px;color:#5B8F6E;font-weight:700;text-align:center;margin-bottom:6px">SUCURSAL: {data.get('sucursal', '')}</div>
-                  <div style="font-family:monospace;font-size:11px;background:#EBF3EE;padding:4px;border-radius:4px;text-align:center;word-break:break-all;color:#072617;margin-bottom:8px">
-                    {tok}
-                  </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                if QR_OK and qrcode:
-                    qr_obj = qrcode.QRCode(version=1, box_size=8, border=2)
-                    qr_obj.add_data(contenido_qr_para(tok))
-                    qr_obj.make(fit=True)
-                    img_qr = qr_obj.make_image(fill_color="#0B3B24", back_color="#FFFFFF")
-                    buf_qr = io.BytesIO()
-                    img_qr.save(buf_qr, format="PNG")
-                    qr_bytes = buf_qr.getvalue()
-                    st.image(qr_bytes, width=160)
-                    st.download_button(
-                        label=f"⬇️ Descargar QR",
-                        data=qr_bytes,
-                        file_name=f"QR_{tok}.png",
-                        mime="image/png",
-                        key=f"dl_qr_tab_{tok}",
-                        use_container_width=True
-                    )
-    else:
-        st.error("🔒 Catálogo restringido: solo el Contador Auditor (máxima jerarquía) puede consultar y descargar las credenciales QR oficiales. Pide la rotación y descarga de credenciales al auditor.")
-
-
-# ---------------------------------------------------------------------
-# TAB: PRUEBAS OPERATIVAS
-# ---------------------------------------------------------------------
-with tab_pruebas:
-    encabezado_institucional("PRUEBAS OPERATIVAS DEL SISTEMA", "VERIFICACIÓN PREVIA", "Verificación formal de componentes críticos antes de abrir la jornada")
-    st.caption(
-        "Verifica en segundos que los componentes críticos funcionan antes de abrir la jornada: "
-        "base de datos, folios, códigos QR, boletos térmicos, credenciales, bitácora y fotografías."
-    )
-    panel_prueba_impresion(key_sufijo="pruebas", expandido=False)
-    panel_reintentos_impresion(expandido=False, sufijo_panel="pruebas")
-    if st.button("▶️ Ejecutar pruebas operativas", type="primary", use_container_width=True, key="btn_ejecutar_pruebas"):
-        resultados_pruebas = ejecutar_pruebas_operativas()
-        st.session_state["resultados_pruebas"] = resultados_pruebas
-    if st.session_state.get("resultados_pruebas"):
-        resultados_pruebas = st.session_state["resultados_pruebas"]
-        exitos = sum(1 for r in resultados_pruebas if r["estado"] == "✅")
-        col_a, col_b = st.columns(2)
-        col_a.metric("Pruebas aprobadas", f"{exitos}/{len(resultados_pruebas)}")
-        col_b.metric("Estado general", "OPERATIVO ✅" if exitos == len(resultados_pruebas) else "REVISAR ❌")
-        st.dataframe(pd.DataFrame(resultados_pruebas), use_container_width=True, hide_index=True)
-        if exitos == len(resultados_pruebas):
-            st.success("Todas las pruebas operativas pasaron. El sistema está listo para la jornada.")
-        else:
-            st.error("Hay pruebas fallidas. Atiende los detalles antes de operar.")
-
-
-with tab_intel:
-    encabezado_institucional("INTELIGENCIA OPERATIVA", "ANÁLISIS CONTINUO", "El sistema se observa a sí mismo: indicadores, alertas, recomendaciones y evolución")
-    st.caption(
-        "Panel ejecutivo que se actualiza automáticamente con cada operación registrada: "
-        "indicadores, alertas tempranas, resumen del día y recomendaciones generadas a partir "
-        "de la información real del sistema."
-    )
-    registros_intel = vehiculos_visibles(st.session_state.vehiculos)
-    if not registros_intel:
-        st.info("El análisis se activará automáticamente al registrar los primeros vehículos.")
-    else:
-        kpis, alertas, resumen, recomendaciones = analisis_inteligente(registros_intel)
-        col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-        for col, (titulo, valor) in zip((col_k1, col_k2, col_k3, col_k4), kpis):
-            col.metric(titulo, valor)
-        st.markdown("**Resumen ejecutivo del día**")
-        st.info(resumen)
-        st.markdown("**Alertas automáticas**")
-        if alertas:
-            st.dataframe(pd.DataFrame(alertas), use_container_width=True, hide_index=True)
-            if st.button("📤 Registrar alertas en la bitácora de auditoría", key="btn_intel_bitacora", use_container_width=True):
-                for alerta in alertas:
-                    guardar_evento_auditoria("Inteligencia Operativa", f"{alerta['tipo']}: {alerta['detalle']}")
-                st.success("Alertas registradas en la bitácora de auditoría.")
-        else:
-            st.success("Sin alertas: no hay estancias críticas, placas duplicadas ni cobros pendientes detectados.")
-        st.markdown("**Recomendaciones automáticas**")
-        for recomendacion in recomendaciones:
-            st.markdown(f"- {recomendacion}")
-
-        st.markdown("**Evolución del sistema (aprendizaje continuo)**")
-        notas_evolucion = evolucion_aprendizaje(registros_intel)
-        if notas_evolucion:
-            for nota in notas_evolucion[:5]:
-                st.markdown(f"- **{nota['fecha']}** · {nota['vehiculos_totales']} vehículos: {nota['observaciones']}")
-        else:
-            st.caption("Cada 25 vehículos registrados, el sistema documentará aquí lo que ha aprendido de la operación.")
-
-    st.markdown("**Salud de la impresión térmica (RawBT)**")
-    eventos_imp = cargar_registro_impresion()
-    fallos_imp = [e for e in eventos_imp if e.get("resultado") == "FALLO"]
-    col_i1, col_i2, col_i3 = st.columns(3)
-    col_i1.metric("Intentos registrados", len(eventos_imp))
-    col_i2.metric("Fallos registrados", len(fallos_imp))
-    col_i3.metric("Último evento", eventos_imp[0]["fecha_hora"] if eventos_imp else "—")
-    if fallos_imp:
-        por_etapa = {}
-        for e in fallos_imp:
-            clave = e.get("etapa", "OTRO")
-            por_etapa[clave] = por_etapa.get(clave, 0) + 1
-        detalle_etapas = " · ".join(
-            f"{ETAPAS_IMPRESION.get(k, k)}: {v}" for k, v in por_etapa.items()
-        )
-        st.warning("Fallos de impresión detectados → " + detalle_etapas)
-        st.dataframe(pd.DataFrame(fallos_imp[:10]), use_container_width=True, hide_index=True)
-    elif eventos_imp:
-        st.success("La impresión térmica opera sin fallos registrados.")
-    else:
-        st.caption("Aún no hay eventos de impresión: ejecuta la prueba de impresión en 🧪 Pruebas Operativas o en 🖨️ Re-Impresión Térmica.")
+    
