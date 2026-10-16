@@ -8,3 +8,13 @@ opencv-python-headless
 numpy
 zxing-cpp
 pyzbar
+streamlit
+pandas
+Pillow
+qrcode[pil]
+openpyxl
+xlsxwriter
+opencv-python-headless
+numpy
+zxing-cpp
+pyzbar
