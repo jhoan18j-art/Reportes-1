@@ -1081,12 +1081,6 @@ def generar_ticket_prueba_impresion():
         "  SISTEMA INSTITUCIONAL DE CONTROL",
         "------------------------------------",
         f" FECHA  : {ahora.strftime('%d/%m/%Y %H:%M:%S')}",
-            lineas = [
-        "         PRUEBA DE IMPRESIÓN",
-        " CLUB PARK VALET Y ESTACIONAMIENTOS",
-        " SISTEMA INSTITUCIONAL DE CONTROL",
-        "------------------------------------",
-        f" FECHA : {ahora.strftime('%d/%m/%Y %H:%M:%S')}",
         f" USUARIO: {st.session_state.get('usuario_autenticado') or 'Sesión local'}",
         " PRUEBA : BINARIO ESC/POS + QR",
         " Si lees este texto, la impresora",
@@ -1094,6 +1088,7 @@ def generar_ticket_prueba_impresion():
         "------------------------------------",
     ]
     return "\n".join(lineas), f"CLUBPARK|PRUEBA|{ahora:%Y%m%d%H%M%S}"
+    
 
 
 def panel_prueba_impresion(key_sufijo="diag", expandido=True):
