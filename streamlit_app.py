@@ -3658,6 +3658,7 @@ with tab_intel:
     col_i3.metric("Último evento", eventos_imp[0]["fecha_hora"] if eventos_imp else "—")
     if fallos_imp:
                 por_etapa = {}
+                por_etapa = {}
         for e in fallos_imp:
             clave = e.get("etapa", "OTRO")
             por_etapa[clave] = por_etapa.get(clave, 0) + 1
@@ -3672,5 +3673,4 @@ with tab_intel:
             st.success("La impresión térmica opera sin fallos registrados.")
         else:
             st.caption("Aún no hay eventos de impresión: ejecuta la prueba de impresión en 🧪 Pruebas Operativas o en 🖨️ Re-Impresión Térmica.")
-            
-        
+  
