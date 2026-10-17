@@ -1,383 +1,973 @@
-<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Club Park - Cámara y Lector QR</title>
+# -*- coding: utf-8 -*-
+"""
+CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.
+Sistema de control operativo con Streamlit.
+
+IMPORTANTE:
+- Para conservar archivos en Streamlit Cloud después de reinicios/despliegues,
+  configura CLUBPARK_DATA_DIR con una ruta de almacenamiento persistente o usa
+  un servicio externo (S3, Azure Blob, Supabase Storage, etc.).
+- Cambia los tokens de ejemplo antes de usar la aplicación en producción.
+- La impresión Bluetooth Web Bluetooth requiere navegador/dispositivo compatible,
+  contexto HTTPS y una impresora que exponga un servicio GATT compatible.
+"""
+
+import io
+import json
+import os
+import re
+import uuid
+import zipfile
+import urllib.parse
+import html
+import base64
+from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
+import streamlit as st
+from PIL import Image, ImageOps
+
+try:
+    import qrcode
+    QR_OK = True
+except ImportError:
+    qrcode = None
+    QR_OK = False
+
+try:
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    OPENPYXL_OK = True
+except ImportError:
+    OPENPYXL_OK = False
+
+try:
+    import xlsxwriter  # noqa: F401
+    XLSXWRITER_OK = True
+except ImportError:
+    XLSXWRITER_OK = False
+
+
+# ---------------------------------------------------------------------
+# CONFIGURACIÓN
+# ---------------------------------------------------------------------
+st.set_page_config(
+    page_title="Club Park - Control Operativo",
+    page_icon="🚗",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ---------------------------------------------------------------------
+# ESTILO CONSTITUCIONAL E INSTITUCIONAL - VERDE BOTELLA (#0B3B24)
+# CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.
+# ---------------------------------------------------------------------
+CSS_INSTITUCIONAL = """
 <style>
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  color: #1A2B20;
-  background: transparent;
-  font-size: 14px;
+/* Paleta Institucional Club Park: Verde Botella Oficial */
+:root {
+  --cpv-verde-botella: #0B3B24;
+  --cpv-verde-oscuro: #072617;
+  --cpv-verde-medio: #145A32;
+  --cpv-verde-claro: #EBF3EE;
+  --cpv-dorado-oficial: #5B8F6E;
+  --cpv-dorado-brillante: #7FA98C;
+  --cpv-fondo-suave: #F4F7F5;
+  --cpv-texto-principal: #1A2B20;
 }
-main { padding: 8px; max-width: 600px; margin: 0 auto; }
-.camera-container {
-  position: relative;
-  width: 100%;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #071D12;
-  border: 2px solid #0B3B24;
-  box-shadow: 0 4px 12px rgba(11, 59, 36, 0.15);
-}
-video { width: 100%; max-height: 58vh; object-fit: cover; display: block; background: #071D12; }
-canvas { display: none; }
-.qr-overlay {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 230px; height: 230px;
-  border: 2px dashed rgba(197, 160, 89, 0.85);
-  border-radius: 16px;
-  box-shadow: 0 0 0 9999px rgba(7, 29, 18, 0.45);
-  pointer-events: none;
-}
-.qr-overlay::before, .qr-overlay::after {
-  content: "";
-  position: absolute;
-  width: 26px; height: 26px;
-  border-color: #C5A059;
-  border-style: solid;
-}
-.qr-overlay::before { top: -2px; left: -2px; border-width: 4px 0 0 4px; border-top-left-radius: 12px; }
-.qr-overlay::after { bottom: -2px; right: -2px; border-width: 0 4px 4px 0; border-bottom-right-radius: 12px; }
-.controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 6px 0; }
-.controls button, .controls a {
-  flex: 1;
-  min-width: 150px;
-  border: 1px solid #072617;
-  border-radius: 8px;
-  padding: 12px 15px;
-  background: #0B3B24;
-  color: #FFFFFF;
+
+/* Encabezados y títulos */
+h1, h2, h3 {
+  color: #0B3B24 !important;
+  font-family: Georgia, "Palatino Linotype", "Times New Roman", serif !important;
   font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  text-decoration: none;
+  letter-spacing: 0.4px;
 }
-.controls button:hover { background: #145A32; }
-.controls button:active { transform: scale(0.98); }
-.controls button.secondary { background: #E8EFEA; color: #0B3B24; border-color: #C4D7CC; }
-.controls button.secondary:hover { background: #D9E6DE; }
-.controls button:disabled { opacity: 0.6; cursor: wait; }
-.status {
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: #EBF3EE;
-  color: #0B3B24;
+h1 { font-size: 1.65rem !important; }
+h2 { font-size: 1.35rem !important; }
+h3 { font-size: 1.12rem !important; }
+
+/* Botones Primarios */
+button[kind="primary"], .stButton > button[kind="primary"], div[data-testid="stFormSubmitButton"] > button {
+  background-color: #0B3B24 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #072617 !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 5px rgba(11, 59, 36, 0.25) !important;
+  transition: all 0.2s ease !important;
+}
+button[kind="primary"]:hover, .stButton > button[kind="primary"]:hover {
+  background-color: #145A32 !important;
+  border-color: #0B3B24 !important;
+  color: #FFFFFF !important;
+}
+
+/* Botones Secundarios */
+button[kind="secondary"], .stButton > button[kind="secondary"] {
+  background-color: #FFFFFF !important;
+  color: #0B3B24 !important;
+  border: 1px solid #C4D7CC !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+}
+button[kind="secondary"]:hover, .stButton > button[kind="secondary"]:hover {
+  background-color: #EBF3EE !important;
+  border-color: #0B3B24 !important;
+  color: #0B3B24 !important;
+}
+
+/* Pestañas (Tabs) en Verde Botella */
+button[data-baseweb="tab"] {
+  color: #1A2B20 !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+  color: #0B3B24 !important;
+  border-bottom-color: #0B3B24 !important;
+  font-weight: 700 !important;
+  box-shadow: inset 0 -3px 0 #5B8F6E;
+}
+
+/* Alertas y métricas */
+div[data-testid="stMetricValue"] {
+  color: #0B3B24 !important;
+}
+div[data-testid="stAlert"] {
+  border-radius: 8px !important;
+}
+
+/* Banners institucionales */
+.clubpark-header-card {
+  background: linear-gradient(135deg, #072617 0%, #0B3B24 65%, #145A32 100%);
+  border: 2px solid #5B8F6E;
+  border-radius: 12px;
+  padding: 20px 24px;
+  color: #FFFFFF;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 14px rgba(11, 59, 36, 0.25);
+}
+.clubpark-badge {
+  background: rgba(46, 107, 71, 0.30);
+  border: 1px solid #5B8F6E;
+  color: #E8F3EC;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-block;
+  letter-spacing: 0.5px;
+}
+
+/* Barra lateral institucional en verde botella */
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #072617 0%, #0B3B24 70%, #145A32 100%);
+  border-right: 2px solid #5B8F6E;
+}
+section[data-testid="stSidebar"] * { color: #F4F7F5 !important; }
+section[data-testid="stSidebar"] button[kind="primary"],
+section[data-testid="stSidebar"] button[kind="secondary"],
+section[data-testid="stSidebar"] .stButton > button {
+  background-color: #F4F7F5 !important; color: #0B3B24 !important;
+  border: 1px solid #5B8F6E !important; font-weight: 700 !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+  background-color: #EBF3EE !important;
+}
+
+/* Tarjetas de métricas formales */
+div[data-testid="stMetric"] {
+  background: #FFFFFF;
   border: 1px solid #C4D7CC;
-  margin: 8px 0;
-  font-weight: 500;
-  font-size: 13px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
+  border-left: 3px solid #5B8F6E;
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 1px 4px rgba(11, 59, 36, 0.10);
 }
-.status.ok { background: #E2F0D9; color: #1E4620; border-color: #A9D18E; }
-.status.err { background: #FCE4D6; color: #C65911; border-color: #F8CBAD; }
-.hidden { display: none !important; }
-#preview { width: 100%; border-radius: 12px; border: 2px solid #0B3B24; margin-top: 8px; display: block; }
+
+/* Expanders y contenedores */
+div[data-testid="stExpander"] {
+  border: 1px solid #C4D7CC !important;
+  border-radius: 10px !important;
+  background: #FFFFFF !important;
+}
+
+/* Entradas de texto con borde institucional */
+input, textarea, div[data-baseweb="select"] > div {
+  border: 1px solid #C4D7CC !important;
+  border-radius: 8px !important;
+}
+input:focus, textarea:focus {
+  border-color: #0B3B24 !important;
+  box-shadow: 0 0 0 1px #0B3B24 !important;
+}
+.clubpark-gold-rule { border: 0; border-top: 2px solid #5B8F6E; margin: 12px 0; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.4.0/dist/streamlit-component-lib.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-</head>
-<body>
-<main>
-  <div id="status" class="status">Sistema de cámara institucional Club Park listo. Pulsa el botón verde para activar la cámara.</div>
+"""
+st.markdown(CSS_INSTITUCIONAL, unsafe_allow_html=True)
 
-  <div class="camera-container" id="cameraBox">
-    <video id="video" autoplay playsinline muted></video>
-    <div id="qrOverlay" class="qr-overlay"></div>
+
+def encabezado_institucional(titulo, badge="", subtitulo=""):
+    """Encabezado formal uniforme para todas las pestañas del sistema institucional."""
+    insignia = f'<div class="clubpark-badge" style="margin-top:2px">{badge}</div>' if badge else ""
+    sub = f'<div style="font-size:13px;color:#EBF3EE;margin-top:2px">{subtitulo}</div>' if subtitulo else ""
+    st.markdown(
+        f"""<div class="clubpark-header-card">
+          {insignia}
+          <h3 style="color:#FFFFFF !important;margin:6px 0 2px 0">{titulo}</h3>
+          {sub}
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = Path(os.environ.get("CLUBPARK_DATA_DIR", str(BASE_DIR)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+PHOTO_DIR = DATA_DIR / "fotos_vehiculos"
+PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+DB_FILE = DATA_DIR / "vehiculos_produccion_db.json"
+CONFIG_FILE = DATA_DIR / "config_operativa.json"
+AUDIT_FILE = DATA_DIR / "auditoria_operativa.json"
+PAYMENTS_FILE = DATA_DIR / "pagos_registrados.json"
+
+_CONTADOR_LLAVES = 0
+
+def llave_unica(base):
+    global _CONTADOR_LLAVES
+    _CONTADOR_LLAVES += 1
+    return f"{base}__{_CONTADOR_LLAVES}"
+
+PRECIOS_SUCURSALES = {
+    "PAMPAS INSURGENTES": 50,
+    "PAMPAS COAPA": 50,
+    "RAMMA": 70,
+    "SUSHITTO": 40,
+    "CARAJILLO POLANCO": 100,
+    "BENINGAN´S": 40,
+    "SANATORIO DURANGO": 100,
+    "BARRANCA": 0,
+    "VETERINARIA": 0,
+    "ROMANCE PALACE": 65,
+    "JUNGLA TLALPAN": 100,
+    "JUNGLA DIVISIÓN": 100,
+    "JUNGLA PICACHO": 100,
+    "JUNGLA EMPRESA": 100,
+    "SIPIRILY COAPA": 80,
+    "MAROMETA SATÉLITE": 70,
+    "MAROMETA MARINA": 70,
+    "SUMO STA. MONICA": 50,
+    "SUMO ECHEGARAY": 50,
+    "RYOSHI": 80,
+    "ENCANTO": 60,
+    "E-BNI": 50,
+    "CHURRASQUERIA": 70,
+}
+SUCURSALES = sorted(PRECIOS_SUCURSALES)
+
+TOKENS_POR_DEFECTO = {
+    "CPV-GLOBAL-AUDITOR-2026": {
+        "nombre": "Víctor (Contador)",
+        "sucursal": "TODAS",
+        "rol": "Contador Auditor (Máxima Jerarquía)",
+    },
+    "CPV-GLOBAL-JESUS-2026": {
+        "nombre": "José de Jesús",
+        "sucursal": "TODAS",
+        "rol": "Supervisor Global",
+    },
+    "CPV-GLOBAL-VICTOR-2026": {
+        "nombre": "Víctor Manuel",
+        "sucursal": "TODAS",
+        "rol": "Supervisor Global",
+    },
+    "CPV-QR-PAMPAS-INS": {"nombre": "Encargado Pampas Ins.", "sucursal": "PAMPAS INSURGENTES", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-PAMPAS-COAPA": {"nombre": "Encargado Pampas Coapa", "sucursal": "PAMPAS COAPA", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-RAMMA": {"nombre": "Encargado Ramma", "sucursal": "RAMMA", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-SUSHITTO": {"nombre": "Encargado Sushitto", "sucursal": "SUSHITTO", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-CARAJILLO": {"nombre": "Encargado Carajillo", "sucursal": "CARAJILLO POLANCO", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-BENINGANS": {"nombre": "Encargado Beningan's", "sucursal": "BENINGAN´S", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-DURANGO": {"nombre": "Encargado Sanatorio Durango", "sucursal": "SANATORIO DURANGO", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-BARRANCA": {"nombre": "Encargado Barranca", "sucursal": "BARRANCA", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-VETERINARIA": {"nombre": "Encargado Veterinaria", "sucursal": "VETERINARIA", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-ROMANCE": {"nombre": "Encargado Romance", "sucursal": "ROMANCE PALACE", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-TLALPAN": {"nombre": "Encargado Jungla Tlalpan", "sucursal": "JUNGLA TLALPAN", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-DIVISION": {"nombre": "Encargado Jungla División", "sucursal": "JUNGLA DIVISIÓN", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-PICACHO": {"nombre": "Encargado Jungla Picacho", "sucursal": "JUNGLA PICACHO", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-EMPRESA": {"nombre": "Encargado Jungla Empresa", "sucursal": "JUNGLA EMPRESA", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-SIPIRILY": {"nombre": "Encargado Sipirily", "sucursal": "SIPIRILY COAPA", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-SATELITE": {"nombre": "Encargado Marometa Satélite", "sucursal": "MAROMETA SATÉLITE", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-MARINA": {"nombre": "Encargado Marometa Marina", "sucursal": "MAROMETA MARINA", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-SUMOSTA": {"nombre": "Encargado Sumo Santa Mónica", "sucursal": "SUMO STA. MONICA", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-CHEGARAY": {"nombre": "Encargado Sumo Echegaray", "sucursal": "SUMO ECHEGARAY", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-RYOSHI": {"nombre": "Encargado Ryoshi", "sucursal": "RYOSHI", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-ENCANTO": {"nombre": "Encargado Encanto", "sucursal": "ENCANTO", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-EBNI": {"nombre": "Encargado E-BNI", "sucursal": "E-BNI", "rol": "Supervisor de Sucursal"},
+    "CPV-QR-CHURRAS": {"nombre": "Encargado Churrasquería", "sucursal": "CHURRASQUERIA", "rol": "Supervisor de Sucursal"},
+}
+
+def cargar_accesos_protegidos():
+    fuente = "por_defecto"
+    accesos = None
+    try:
+        if "CLUBPARK_TOKENS_JSON" in st.secrets:
+            accesos = json.loads(str(st.secrets["CLUBPARK_TOKENS_JSON"]))
+            fuente = "secrets"
+        elif "CLUBPARK_TOKENS" in st.secrets:
+            accesos = {clave: dict(valor) for clave, valor in st.secrets["CLUBPARK_TOKENS"].items()}
+            fuente = "secrets"
+    except Exception:
+        accesos = None
+    if not accesos:
+        tokens_env = os.environ.get("CLUBPARK_TOKENS_JSON", "").strip()
+        if tokens_env:
+            try:
+                accesos = json.loads(tokens_env)
+                fuente = "entorno"
+            except json.JSONDecodeError:
+                accesos = None
+    if not (isinstance(accesos, dict) and accesos):
+        accesos = dict(TOKENS_POR_DEFECTO)
+        fuente = "por_defecto"
+    return accesos, fuente
+
+ACCESOS, ACCESOS_FUENTE = cargar_accesos_protegidos()
+
+try:
+    APP_URL = str(st.secrets.get("CLUBPARK_APP_URL", "") or os.environ.get("CLUBPARK_APP_URL", "")).strip()
+except Exception:
+    APP_URL = str(os.environ.get("CLUBPARK_APP_URL", "")).strip()
+
+def contenido_qr_para(token):
+    if APP_URL:
+        separador = "&" if "?" in APP_URL else "?"
+        return f"{APP_URL}{separador}qrscan={token}"
+    return token
+
+def cargar_bd():
+    if not DB_FILE.exists():
+        return []
+    try:
+        with DB_FILE.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+def guardar_bd(registros):
+    temp_file = DB_FILE.with_suffix(".json.tmp")
+    try:
+        with temp_file.open("w", encoding="utf-8") as f:
+            json.dump(registros, f, ensure_ascii=False, indent=2)
+        os.replace(temp_file, DB_FILE)
+        return True
+    except OSError as exc:
+        st.error(f"No se pudo guardar la base de datos: {exc}")
+        return False
+
+def cargar_pagos_respaldo():
+    if not PAYMENTS_FILE.exists():
+        return []
+    try:
+        with PAYMENTS_FILE.open("r", encoding="utf-8") as f:
+            datos = json.load(f)
+        return datos if isinstance(datos, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+def guardar_pago_respaldo(pago, registro):
+    pagos = cargar_pagos_respaldo()
+    pago_respaldo = dict(pago)
+    pago_respaldo["registro_id"] = str(registro.get("id", ""))
+    pago_respaldo["sucursal"] = registro.get("sucursal", "")
+    pago_respaldo["marca"] = registro.get("marca", "")
+    pago_respaldo["placas"] = registro.get("placas", "")
+    pago_id = pago_respaldo.get("id_pago")
+    if pago_id and any(p.get("id_pago") == pago_id for p in pagos):
+        return True
+    pagos.insert(0, pago_respaldo)
+    temporal = PAYMENTS_FILE.with_suffix(".tmp")
+    try:
+        with temporal.open("w", encoding="utf-8") as f:
+            json.dump(pagos, f, ensure_ascii=False, indent=2)
+        os.replace(temporal, PAYMENTS_FILE)
+        return True
+    except OSError as exc:
+        st.error(f"No se pudo respaldar el cobro: {exc}")
+        return False
+
+def cargar_config():
+    config = {"siguiente_folio": {}, "historial_folios": []}
+    if CONFIG_FILE.exists():
+        try:
+            with CONFIG_FILE.open("r", encoding="utf-8") as f:
+                guardada = json.load(f)
+            if isinstance(guardada, dict):
+                config.update(guardada)
+        except (OSError, json.JSONDecodeError):
+            pass
+    config.setdefault("siguiente_folio", {})
+    config.setdefault("historial_folios", [])
+    for suc in SUCURSALES:
+        config["siguiente_folio"].setdefault(suc, 1)
+    return config
+
+def guardar_config(config):
+    temporal = CONFIG_FILE.with_suffix(".tmp")
+    with temporal.open("w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+    os.replace(temporal, CONFIG_FILE)
+
+def cargar_auditoria():
+    if not AUDIT_FILE.exists():
+        return []
+    try:
+        with AUDIT_FILE.open("r", encoding="utf-8") as f:
+            datos = json.load(f)
+        return datos if isinstance(datos, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+def guardar_evento_auditoria(tipo, detalle):
+    eventos = cargar_auditoria()
+    eventos.insert(0, {
+        "id_evento": datetime.now().strftime("%Y%m%d%H%M%S") + f"-{len(eventos) + 1:04d}",
+        "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "usuario": st.session_state.get("usuario_autenticado", "Sistema"),
+        "rol": st.session_state.get("rol", ""),
+        "tipo": tipo,
+        "detalle": detalle,
+    })
+    temporal = AUDIT_FILE.with_suffix(".tmp")
+    with temporal.open("w", encoding="utf-8") as f:
+        json.dump(eventos, f, ensure_ascii=False, indent=2)
+    os.replace(temporal, AUDIT_FILE)
+
+CODIGOS_SUCURSAL = {
+    "PAMPAS INSURGENTES": "PINS",
+    "PAMPAS COAPA": "PCOA",
+    "RAMMA": "RAM",
+    "SUSHITTO": "SUS",
+    "CARAJILLO POLANCO": "CARA",
+    "BENINGAN´S": "BEN",
+    "SANATORIO DURANGO": "SDUR",
+    "BARRANCA": "BARR",
+    "VETERINARIA": "VET",
+    "ROMANCE PALACE": "ROM",
+    "JUNGLA TLALPAN": "JTL",
+    "JUNGLA DIVISIÓN": "JDV",
+    "JUNGLA PICACHO": "JPI",
+    "JUNGLA EMPRESA": "JEM",
+    "SIPIRILY COAPA": "SIP",
+    "MAROMETA SATÉLITE": "MSAT",
+    "MAROMETA MARINA": "MMAR",
+    "SUMO STA. MONICA": "SSTA",
+    "SUMO ECHEGARAY": "SEC",
+    "RYOSHI": "RYO",
+    "ENCANTO": "ENC",
+    "E-BNI": "EBN",
+    "CHURRASQUERIA": "CHUR",
+}
+
+ARCHIVO_REGISTRO_IMPRESION = DATA_DIR / "registro_impresion.json"
+ETAPAS_IMPRESION = {
+    "CONEXION": "Fallo de conexión: RawBT no se abrió o no hay impresora emparejada",
+    "ENVIO_ESCPOS": "Fallo de envío ESC/POS: el binario no llegó a la impresora",
+    "IMPRESORA": "Fallo de la impresora: el dato llegó pero no imprimió (papel o cabezal)",
+    "IMPRESION_OK": "Impresión correcta",
+    "INTENTO": "Intento de impresión en espera",
+    "REINTENTO": "Reintento de impresión",
+}
+
+def cargar_registro_impresion():
+    try:
+        datos = json.loads(ARCHIVO_REGISTRO_IMPRESION.read_text(encoding="utf-8"))
+        return datos if isinstance(datos, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+def registrar_evento_impresion(etapa, detalle, resultado="FALLO", datos=None):
+    eventos = cargar_registro_impresion()
+    evento = {
+        "id_impresion": uuid.uuid4().hex[:10],
+        "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "usuario": st.session_state.get("usuario_autenticado") or "Sesión local",
+        "etapa": etapa,
+        "resultado": resultado,
+        "diagnóstico": ETAPAS_IMPRESION.get(etapa, "Evento de impresión"),
+        "detalle": str(detalle)[:300],
+    }
+    if datos:
+        evento["folio"] = str(datos.get("folio", "") or "")
+        evento["tipo_documento"] = str(datos.get("tipo_documento", "") or "BOLETO")
+        if datos.get("payload_b64"):
+            evento["payload_b64"] = datos["payload_b64"]
+    eventos.insert(0, evento)
+    try:
+        ARCHIVO_REGISTRO_IMPRESION.write_text(json.dumps(eventos[:300], ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+    return eventos[:300]
+
+def codigo_sucursal(sucursal):
+    nombre = str(sucursal or "").strip().upper()
+    if nombre in CODIGOS_SUCURSAL:
+        return CODIGOS_SUCURSAL[nombre]
+    palabras = re.findall(r"[A-ZÁÉÍÓÚÜÑ0-9]+", nombre)
+    return ("".join(p[0] for p in palabras)[:4] or "CP")
+
+def siguiente_numero_usado(sucursal, registros):
+    mayor = 0
+    for registro in registros:
+        if registro.get("sucursal") != sucursal:
+            continue
+        folio = str(registro.get("id", ""))
+        coincidencia = re.search(r"-(\d+)$", folio)
+        if coincidencia:
+            try:
+                mayor = max(mayor, int(coincidencia.group(1)))
+            except ValueError:
+                pass
+        try:
+            mayor = max(mayor, int(registro.get("folio_numero", 0) or 0))
+        except (ValueError, TypeError):
+            pass
+    return mayor
+
+def asignar_folio(sucursal, registros):
+    config = cargar_config()
+    configurado = int(config["siguiente_folio"].get(sucursal, 1))
+    minimo_seguro = siguiente_numero_usado(sucursal, registros) + 1
+    numero = max(configurado, minimo_seguro)
+    folio = f"CP-{codigo_sucursal(sucursal)}-{numero:06d}"
+    config["siguiente_folio"][sucursal] = numero + 1
+    guardar_config(config)
+    return folio, numero
+
+def qr_payload(registro):
+    return f"CLUBPARK|VEHICULO|{registro.get('id', '')}"
+
+def generar_qr_bytes(registro):
+    if not QR_OK:
+        return None
+    imagen = qrcode.make(qr_payload(registro))
+    salida = io.BytesIO()
+    imagen.save(salida, format="PNG")
+    return salida.getvalue()
+
+def extraer_folio_qr(valor):
+    valor = (valor or "").strip()
+    if valor.startswith("CLUBPARK|VEHICULO|"):
+        return valor.split("|", 2)[-1].strip()
+    return valor
+
+def crear_partes_ticket(registro):
+    ticket = registro.get("ticket_texto") or crear_ticket(registro)
+    corte = "=" * 32 + "\n           [ CORTE ]\n" + "=" * 32 + "\n"
+    partes = ticket.split(corte, 1)
+    if len(partes) == 2:
+        primera = partes[0] + "\n" + corte.rstrip() + "\n"
+        segunda = partes[1]
+    else:
+        primera = ticket
+        segunda = (
+            "=" * 32 + "\n      BOLETO SIN VALOR LLAVERO\n"
+            f"CLUB PARK VALET Y ESTACIONAMIENTOS\nFOLIO: {registro.get('id', '')}\n"
+            f"MARCA: {registro.get('marca', '')}\n"
+            f"PLACA: {registro.get('placas', '')} | COLOR: {registro.get('color', '')}\n"
+            "UBICACIÓN: _____________________\n"
+            + "=" * 32 + "\n          CONTRASEÑAS\n"
+            "     BOLETO SIN VALOR PARABRISAS\n"
+            f"CLUB PARK VALET Y ESTACIONAMIENTOS\nFOLIO: {registro.get('id', '')}\n"
+            + "=" * 32 + "\n"
+        )
+    return primera, segunda
+
+def construir_payload_escpos(texto, qr_payload_txt=None):
+    partes = bytearray()
+    partes += bytes((0x1B, 0x40))  # ESC @
+    try:
+        partes += str(texto).encode("cp437", errors="replace")
+    except Exception:
+        partes += str(texto).encode("utf-8", errors="replace")
+    partes += b"\n\n\n"
+    if qr_payload_txt:
+        datos_qr = str(qr_payload_txt).encode("utf-8")
+        longitud = len(datos_qr) + 3
+        pL, pH = longitud & 0xFF, (longitud >> 8) & 0xFF
+        partes += bytes((0x1B, 0x61, 0x01))
+        partes += bytes((0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00))
+        partes += bytes((0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x06))
+        partes += bytes((0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31))
+        partes += bytes((0x1D, 0x28, 0x6B, pL, pH, 0x31, 0x50, 0x30)) + datos_qr
+        partes += bytes((0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30))
+        partes += bytes((0x1B, 0x61, 0x00))
+    partes += bytes((0x0A, 0x0A, 0x0A, 0x0A))
+    return bytes(partes)
+
+def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
+    texto_json = json.dumps(str(texto), ensure_ascii=False)
+    qr_json = json.dumps(str(qr_payload or ""), ensure_ascii=False)
+    safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", str(key_suffix))
+
+    payload_binario = construir_payload_escpos(texto, qr_payload)
+    payload_b64 = base64.b64encode(payload_binario).decode("ascii")
+    texto_b64 = base64.b64encode(str(texto).encode("utf-8")).decode("ascii")
+
+    if contexto:
+        try:
+            registrar_evento_impresion(
+                "INTENTO",
+                f"{contexto.get('tipo_documento', '')} · folio {contexto.get('folio', '—')}",
+                "PENDIENTE",
+                datos={
+                    "folio": str(contexto.get("folio", "")),
+                    "tipo_documento": str(contexto.get("tipo_documento", "")),
+                    "payload_b64": payload_b64,
+                },
+            )
+        except Exception:
+            pass
+
+    html_doc = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border:1px solid #C4D7CC;background:#F9FBF9;border-radius:10px;padding:12px;margin:8px 0">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="rawbt:base64,{payload_b64}" target="_top"
+           style="flex:1;min-width:200px;text-decoration:none;background:#0B3B24;color:#FFFFFF;padding:12px;border:1px solid #072617;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">
+          🖨️ Imprimir por Bluetooth (RawBT - Android)
+        </a>
+        <a href="rawbt:data:text/plain;base64,{texto_b64}" target="_top"
+           style="text-decoration:none;background:#FAF8F5;color:#0B3B24;padding:12px;border:1px solid #5B8F6E;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">
+          📄 RawBT solo texto
+        </a>
+      </div>
+      <div style="font-size:12px;line-height:1.45;margin-top:10px;color:#2B4A37">
+        <b>Impresora Bluetooth:</b> Asegúrate de tener la app <b>RawBT</b> instalada en Android y tu impresora térmica emparejada. Pulsa el botón verde para enviar el boleto.
+      </div>
+    </div>
+    """
+    st.components.v1.html(html_doc, height=140)
+
+def dinero(valor):
+    try:
+        return float(valor or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+def normalizar_texto(valor):
+    return str(valor or "").strip()
+
+def usuario_es_contador():
+    return "Contador" in str(st.session_state.get("rol", ""))
+
+def usuario_es_global():
+    return usuario_es_contador() or st.session_state.get("rol") == "Supervisor Global"
+
+def vehiculos_visibles(registros):
+    if usuario_es_global():
+        return registros
+    sucursal = st.session_state.get("sucursal_asignada")
+    return [r for r in registros if r.get("sucursal") == sucursal]
+
+def guardar_foto(uploaded_file, folio, vista):
+    if isinstance(uploaded_file, Image.Image):
+        imagen = uploaded_file.copy()
+    else:
+        imagen = Image.open(uploaded_file)
+    imagen = ImageOps.exif_transpose(imagen).convert("RGB")
+    imagen.thumbnail((1400, 1400))
+    nombre = f"{folio}_{vista}.jpg"
+    ruta = PHOTO_DIR / nombre
+    imagen.save(ruta, format="JPEG", quality=78, optimize=True)
+    return str(ruta)
+
+def ruta_foto(registro, vista):
+    ruta = (registro.get("fotos") or {}).get(vista, "")
+    if not ruta:
+        return None
+    p = Path(ruta)
+    if not p.is_absolute():
+        p = DATA_DIR / p
+    return p if p.exists() else None
+
+def crear_ticket(registro):
+    folio = registro.get("id", "")
+    sucursal = registro.get("sucursal", "")
+    marca = registro.get("marca", "")
+    placas = registro.get("placas", "")
+    color = registro.get("color", "")
+    tarifa = float(registro.get("tarifa", 0) or 0)
+    entrada_dt = registro.get("fecha_entrada") or registro.get("fecha", "")
+    salida_dt = registro.get("salida_fecha") or "PENDIENTE"
+    custodia = registro.get("custodia", "") or "SIN OBJETOS DECLARADOS"
+    linea = "=" * 32
+    guion = "-" * 32
+    return f"""{linea}
+ CLUB PARK VALET Y ESTACIONAMIENTOS
+         S.A. DE C.V.
+{linea}
+SUCURSAL: {sucursal}
+FOLIO TICKET: {folio}
+TARIFA: ${tarifa:,.2f} MXN
+{guion}
+MARCA: {marca}
+PLACA: {placas}  COLOR: {color}
+FECHA/HORA ENTRADA: {entrada_dt}
+FECHA/HORA SALIDA: {salida_dt}
+{guion}
+[X] OBSERVACIONES Y CUSTODIA:
+{custodia}
+{guion}
+       BOLETO DEL CLIENTE
+{guion}
+NO NOS HACEMOS RESPONSABLES POR
+OBJETOS COMO SON: EFECTIVO, CHEQUES,
+ARMAS, BOLSAS, TARJETAS, CELULARES.
+{linea}
+"""
+
+def leer_codigo_qr(imagen_pil):
+    if imagen_pil is None:
+        return None
+    if not isinstance(imagen_pil, Image.Image):
+        try:
+            imagen_pil = Image.open(imagen_pil)
+        except Exception:
+            return None
+    try:
+        base = ImageOps.exif_transpose(imagen_pil).convert("RGB")
+    except Exception:
+        base = imagen_pil.convert("RGB")
+
+    try:
+        import zxingcpp
+        hallados = zxingcpp.read_barcodes(base, try_harder=True, try_rotate=True)
+        if hallados:
+            return str(hallados[0].text).strip()
+    except Exception:
+        pass
+    return None
+
+def lector_qr_camara_trasera(key="lector_qr_trasero", height=390):
+    st.info("💡 **Consejo para la cámara trasera en Android:** Al pulsar el botón de captura, tu navegador o el sistema te preguntará qué cámara usar; selecciona la **cámara trasera** o usa el botón de alternar cámara en pantalla.")
+    foto_qr = st.camera_input("Capturar el código QR", key=key)
+    if foto_qr is None:
+        subida = st.file_uploader("O sube una foto del código QR", type=["png", "jpg", "jpeg"], key=f"{key}_subida")
+        if subida is not None:
+            try:
+                token = leer_codigo_qr(Image.open(subida))
+                return str(token).strip() if token else None
+            except Exception:
+                return None
+        return None
+    try:
+        token = leer_codigo_qr(Image.open(foto_qr))
+        return str(token).strip() if token else None
+    except Exception:
+        return None
+
+def camara_trasera_foto_pertenencias(key="foto_pertenencias_trasera", height=430):
+    captura = st.camera_input("Tomar fotografía", key=key)
+    if captura is None:
+        return None
+    try:
+        return Image.open(captura).copy()
+    except Exception:
+        return None
+
+# Estado de sesión
+if "usuario_autenticado" not in st.session_state:
+    st.session_state.usuario_autenticado = None
+if "sucursal_asignada" not in st.session_state:
+    st.session_state.sucursal_asignada = None
+if "rol" not in st.session_state:
+    st.session_state.rol = None
+if "vehiculos" not in st.session_state:
+    st.session_state.vehiculos = cargar_bd()
+
+# Login
+if st.session_state.usuario_autenticado is None:
+    left, center, right = st.columns([1, 2.2, 1])
+    with center:
+        st.markdown(f"""
+        <div class="clubpark-header-card" style="text-align:center;padding:18px 20px;margin-bottom:16px">
+          <div class="clubpark-badge" style="margin-bottom:6px">Acceso Operativo Oficial</div>
+          <h2 style="color:#FFFFFF !important;margin:4px 0 2px 0;font-size:22px">CLUB PARK VALET</h2>
+          <div style="font-size:12px;color:#7FA98C;letter-spacing:1px">Y ESTACIONAMIENTOS S.A. DE C.V.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.info("Identifícate mediante credencial QR o ingresa tu token operativo.")
+
+        metodo = st.radio(
+            "Método de autenticación:",
+            ["📷 Foto de QR con la cámara del dispositivo", "🔑 Token manual"],
+            horizontal=False,
+            key="metodo_login_operativo_v6"
+        )
+
+        token = str(st.query_params.get("qrscan", "") or "").strip() or None
+
+        if metodo.startswith("📷"):
+            if not token:
+                token_leido = lector_qr_camara_trasera("lector_login_trasero", height=390)
+                if token_leido:
+                    token = str(token_leido).strip()
+                    st.success("Código QR leído correctamente.")
+        else:
+            token_input = st.text_input("Ingresa tu token de acceso asignado", type="password")
+            if st.button("Validar acceso", type="primary", use_container_width=True):
+                token = token_input.strip()
+
+        if token:
+            info = ACCESOS.get(token)
+            if info:
+                st.session_state.usuario_autenticado = info.get("nombre", "Usuario")
+                st.session_state.sucursal_asignada = info.get("sucursal", "")
+                st.session_state.rol = info.get("rol", "Supervisor de Sucursal")
+                if "qrscan" in st.query_params:
+                    del st.query_params["qrscan"]
+                st.success(f"Acceso concedido: **{info.get('nombre')}** ({info.get('rol')})")
+                st.rerun()
+            else:
+                st.error(f"Token o código QR no reconocido: `{token}`.")
+
+    st.stop()
+
+# Navegación principal
+es_contador = usuario_es_contador()
+es_global = usuario_es_global()
+sucursal_texto = "Todas (Global)" if es_global else st.session_state.sucursal_asignada
+
+st.markdown(f"""
+<div class="clubpark-header-card">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="clubpark-badge">SISTEMA INSTITUCIONAL DE CONTROL OPERATIVO</div>
+      <h2 style="color:#FFFFFF !important;margin:6px 0 2px 0;font-size:24px">CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.</h2>
+      <div style="font-size:13px;color:#EBF3EE">
+        <b>Usuario:</b> {st.session_state.usuario_autenticado} &nbsp;|&nbsp;
+        <b>Rol:</b> {st.session_state.rol} &nbsp;|&nbsp;
+        <b>Sucursal:</b> <span style="color:#7FA98C;font-weight:700">{sucursal_texto}</span>
+      </div>
+    </div>
   </div>
+</div>
+""", unsafe_allow_html=True)
 
-  <canvas id="canvas"></canvas>
-  <img id="preview" class="hidden" alt="Vista previa">
+with st.sidebar:
+    st.markdown('<div style="font-weight:800;color:#FFFFFF;letter-spacing:2px;font-size:16px;text-align:center;background:#0B3B24;border-radius:10px;padding:10px 8px;border:1px solid #2F6B4C">CLUB PARK VALET</div>', unsafe_allow_html=True)
+    st.subheader("Panel de sesión")
+    st.write(f"**Usuario:** {st.session_state.usuario_autenticado}")
+    st.write(f"**Rol:** {st.session_state.rol}")
+    if st.button("🚪 Cerrar sesión", use_container_width=True):
+        st.session_state.usuario_autenticado = None
+        st.session_state.sucursal_asignada = None
+        st.session_state.rol = None
+        st.rerun()
 
-  <!-- Controles QR -->
-  <div class="controls" id="qrControls">
-    <button id="startQR" type="button">📷 Activar cámara trasera</button>
-    <button id="switchQR" class="secondary hidden" type="button">🔄 Cambiar cámara</button>
-    <button id="stopQR" class="secondary hidden" type="button">⏹️ Detener</button>
-  </div>
+tab_ing, tab_list, tab_salida, tab_imp, tab_rep = st.tabs([
+    "📥 Ingreso y Fotografías",
+    "📋 Vehículos Registrados",
+    "🚘 Salida y Cobro",
+    "🖨️ Re-Impresión Térmica",
+    "📊 Reportes y Excel",
+])
 
-  <!-- Controles FOTO -->
-  <div class="controls hidden" id="photoControls">
-    <button id="startPhoto" type="button">📷 Activar cámara trasera</button>
-    <button id="capturePhoto" class="hidden" type="button">📸 Tomar fotografía</button>
-    <button id="switchPhoto" class="secondary hidden" type="button">🔄 Cambiar cámara</button>
-    <button id="stopPhoto" class="secondary hidden" type="button">⏹️ Detener</button>
-  </div>
+with tab_ing:
+    encabezado_institucional("REGISTRO DE INGRESO DE VEHÍCULO", "OPERACIÓN 1", "Protocolo institucional de recepción con evidencia fotográfica")
+    c1, c2 = st.columns(2)
+    with c1:
+        if es_global:
+            sucursal = st.selectbox("Sucursal operativa", ["-- Selecciona la Sucursal --"] + SUCURSALES)
+        else:
+            sucursal = st.session_state.sucursal_asignada
+            st.info(f"Sucursal asignada: **{sucursal}**")
+        marca = st.text_input("Marca y modelo", key="ing_marca")
+        color = st.text_input("Color", key="ing_color")
+    with c2:
+        placas = st.text_input("Placas / folio de placa", key="ing_placas").strip().upper()
+        tarifa = float(PRECIOS_SUCURSALES.get(sucursal, 50))
+        st.metric("Tarifa fija de la sucursal", f"${tarifa:,.2f} MXN")
+        operador = st.text_input("Valet / operador", value=st.session_state.usuario_autenticado)
+    
+    custodia = st.text_area("Objetos declarados y observaciones", value="SIN OBJETOS DE VALOR DECLARADOS", key="ing_custodia_texto")
+    
+    st.markdown("**📷 Fotografías del vehículo (Cámara trasera)**")
+    st.info("💡 Asegúrate de usar la **cámara trasera** de tu teléfono para capturar las vistas reglamentarias (frente, trasera, costados).")
+    
+    fotos_vehiculo = {}
+    for vista, titulo in [("frente", "1. Vista frontal"), ("trasera", "2. Vista trasera"), ("izquierda", "3. Costado izquierdo"), ("derecha", "4. Costado derecho")]:
+        fotos_vehiculo[vista] = st.camera_input(titulo, key=f"foto_veh_{vista}")
 
-  <!-- ACEPTAR / RETOMAR -->
-  <div class="controls hidden" id="resultControls">
-    <button id="accept" type="button">✅ Usar esta fotografía</button>
-    <button id="retake" class="secondary" type="button">🔄 Volver a tomar</button>
-  </div>
-</main>
+    if st.button("💾 Registrar ingreso y generar ticket", type="primary", use_container_width=True):
+        if not marca.strip() or not placas:
+            st.error("Completa la marca y las placas del vehículo.")
+        else:
+            folio, folio_numero = asignar_folio(sucursal, st.session_state.vehiculos)
+            ahora_entrada = datetime.now()
+            rutas = {v: guardar_foto(f, folio, v) for v, f in fotos_vehiculo.items() if f}
+            
+            registro = {
+                "id": folio,
+                "folio_numero": folio_numero,
+                "fecha": ahora_entrada.strftime("%d/%m/%Y %H:%M:%S"),
+                "sucursal": sucursal,
+                "marca": marca.strip(),
+                "color": color.strip(),
+                "placas": placas,
+                "tarifa": float(tarifa),
+                "operador": operador.strip(),
+                "custodia": custodia.strip(),
+                "fotos": rutas,
+                "estado": "En Resguardo",
+            }
+            registro["ticket_texto"] = crear_ticket(registro)
+            st.session_state.vehiculos.insert(0, registro)
+            if guardar_bd(st.session_state.vehiculos):
+                st.session_state.ultimo_ticket = registro["ticket_texto"]
+                st.session_state.ultimo_folio = folio
+                st.success(f"Ingreso registrado con éxito. Folio: {folio}")
+                st.rerun()
 
-<script>
-(function() {
-  const $ = id => document.getElementById(id);
-  const video = $('video');
-  const canvas = $('canvas');
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  const preview = $('preview');
-  const cameraBox = $('cameraBox');
-  const qrOverlay = $('qrOverlay');
-  const status = $('status');
+with tab_list:
+    encabezado_institucional("VEHÍCULOS REGISTRADOS", "CONTROL DE RESGUARDO", "Estado actual de los vehículos en resguardo")
+    visibles = vehiculos_visibles(st.session_state.vehiculos)
+    if not visibles:
+        st.info("No hay vehículos registrados para tu alcance.")
+    else:
+        df_v = pd.DataFrame(visibles)
+        st.dataframe(df_v[["id", "fecha", "sucursal", "marca", "placas", "tarifa", "estado"]], use_container_width=True, hide_index=True)
 
-  const qrControls = $('qrControls');
-  const startQRBtn = $('startQR');
-  const switchQRBtn = $('switchQR');
-  const stopQRBtn = $('stopQR');
+with tab_salida:
+    encabezado_institucional("SALIDA DE VEHÍCULO Y COBRO", "OPERACIÓN 2", "Entrega y registro de cobro")
+    folio_buscar = st.text_input("Ingresa o escanea el folio del boleto", key="folio_buscar_salida").strip()
+    registro_salida = next((r for r in st.session_state.vehiculos if str(r.get("id", "")).upper() == folio_buscar.upper()), None)
+    
+    if registro_salida and registro_salida.get("estado") == "En Resguardo":
+        st.write(f"**Vehículo:** {registro_salida.get('marca')} - Placas: {registro_salida.get('placas')}")
+        if st.button("💳 Confirmar cobro y salida", type="primary"):
+            registro_salida["estado"] = "Entregado"
+            registro_salida["salida_fecha"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            guardar_bd(st.session_state.vehiculos)
+            st.success(f"Salida registrada para el folio {registro_salida.get('id')}.")
+            st.rerun()
 
-  const photoControls = $('photoControls');
-  const startPhotoBtn = $('startPhoto');
-  const capturePhotoBtn = $('capturePhoto');
-  const switchPhotoBtn = $('switchPhoto');
-  const stopPhotoBtn = $('stopPhoto');
+with tab_imp:
+    encabezado_institucional("RE-IMPRESIÓN TÉRMICA", "IMPRESIÓN ESC/POS", "Reemisión de boletos mediante Bluetooth")
+    visibles = vehiculos_visibles(st.session_state.vehiculos)
+    if visibles:
+        folio_imp = st.selectbox("Selecciona folio", [r.get("id", "") for r in visibles])
+        reg_imp = next((r for r in visibles if r.get("id") == folio_imp), None)
+        if reg_imp:
+            ticket = reg_imp.get("ticket_texto") or crear_ticket(reg_imp)
+            st.code(ticket, language="text")
+            imprimir_bluetooth(ticket, f"reimp_{folio_imp}", qr_payload=qr_payload(reg_imp))
 
-  const resultControls = $('resultControls');
-  const acceptBtn = $('accept');
-  const retakeBtn = $('retake');
-
-  let mode = 'qr';
-  let stream = null;
-  let running = false;
-  let currentFacing = 'environment';
-  let lastValue = '';
-  let capturedDataUrl = '';
-  let scanTimerId = null;
-  let autoIntentado = false;
-
-  function send(val) {
-    if (window.Streamlit && Streamlit.setComponentValue) Streamlit.setComponentValue(val);
-  }
-
-  function say(msg, kind) {
-    status.textContent = msg;
-    status.className = 'status' + (kind ? ' ' + kind : '');
-    ajustarAlto();
-  }
-
-  function ajustarAlto() {
-    if (window.Streamlit && Streamlit.setFrameHeight) {
-      setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 15), 60);
-    }
-  }
-
-  function stop() {
-    running = false;
-    if (scanTimerId) { clearInterval(scanTimerId); scanTimerId = null; }
-    if (stream) {
-      stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
-      stream = null;
-    }
-    video.srcObject = null;
-    updateButtonVisibility();
-  }
-
-  function updateButtonVisibility() {
-    qrControls.classList.toggle('hidden', mode !== 'qr');
-    photoControls.classList.toggle('hidden', mode === 'qr');
-    qrOverlay.classList.toggle('hidden', !(mode === 'qr' && running));
-
-    if (mode === 'qr') {
-      cameraBox.classList.remove('hidden');
-      preview.classList.add('hidden');
-      resultControls.classList.add('hidden');
-      startQRBtn.classList.remove('hidden');
-      startQRBtn.textContent = running ? '🟢 Cámara activa - escaneando…' : '📷 Activar cámara trasera';
-      startQRBtn.disabled = running;
-      switchQRBtn.classList.toggle('hidden', !running);
-      stopQRBtn.classList.toggle('hidden', !running);
-    } else if (capturedDataUrl) {
-      cameraBox.classList.add('hidden');
-      preview.classList.remove('hidden');
-      photoControls.classList.add('hidden');
-      resultControls.classList.remove('hidden');
-    } else {
-      cameraBox.classList.remove('hidden');
-      preview.classList.add('hidden');
-      resultControls.classList.add('hidden');
-      startPhotoBtn.classList.toggle('hidden', running);
-      capturePhotoBtn.classList.toggle('hidden', !running);
-      switchPhotoBtn.classList.toggle('hidden', !running);
-      stopPhotoBtn.classList.toggle('hidden', !running);
-    }
-    ajustarAlto();
-  }
-
-  async function start(facing) {
-    stop();
-    currentFacing = facing || currentFacing;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      say('Este navegador no permite acceso a la cámara desde aquí. Abre la app en Chrome (Android) o Safari (iPhone) y usa la opción «Cámara del dispositivo».', 'err');
-      return;
-    }
-    const etiqueta = currentFacing === 'environment' ? 'trasera' : 'frontal';
-    say('Solicitando permiso de cámara ' + etiqueta + '… Acepta el permiso del navegador.');
-    const intentos = [
-      { audio: false, video: { facingMode: { exact: currentFacing }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-      { audio: false, video: { facingMode: { ideal: currentFacing }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-      { audio: false, video: { facingMode: currentFacing } },
-      { audio: false, video: true }
-    ];
-    let ultimoError = null;
-    for (const c of intentos) {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(c);
-        if (stream) break;
-      } catch(err) { ultimoError = err; }
-    }
-    if (!stream) {
-      const nombre = ultimoError && ultimoError.name || 'Error';
-      if (nombre === 'NotAllowedError' || nombre === 'SecurityError') {
-        say('Permiso de cámara DENEGADO. Toca el candado / icono junto a la dirección del sitio y permite la cámara, luego pulsa de nuevo. Alternativa garantizada: usa la opción «Cámara del dispositivo».', 'err');
-      } else if (nombre === 'NotFoundError') {
-        say('No se encontró ninguna cámara disponible en este dispositivo.', 'err');
-      } else {
-        say('No se pudo abrir la cámara (' + nombre + '). Si estás dentro de una ventana integrada, abre la app a pantalla completa o usa «Cámara del dispositivo».', 'err');
-      }
-      updateButtonVisibility();
-      return;
-    }
-    try {
-      video.srcObject = stream;
-      await video.play();
-    } catch(e) {}
-    running = true;
-    capturedDataUrl = '';
-    lastValue = '';
-    updateButtonVisibility();
-    if (mode === 'qr') {
-      say('🟢 Cámara ' + etiqueta + ' activa. Apunta al código QR; la lectura es automática.', 'ok');
-      iniciarEscaneo();
-    } else {
-      say('🟢 Cámara ' + etiqueta + ' lista. Encuadra y pulsa «Tomar fotografía».', 'ok');
-    }
-  }
-
-  function iniciarEscaneo() {
-    if (scanTimerId) clearInterval(scanTimerId);
-    scanTimerId = setInterval(scanFrame, 120);
-  }
-
-  function scanFrame() {
-    if (!running || mode !== 'qr') return;
-    if (video.readyState < 2 || !video.videoWidth) return;
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    canvas.width = w;
-    canvas.height = h;
-    ctx.drawImage(video, 0, 0, w, h);
-    let valor = null;
-    try {
-      if (window.BarcodeDetector) {
-        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-        detector.detect(video).then(codigos => {
-          if (codigos && codigos.length && codigos[0].rawValue) procesarLectura(codigos[0].rawValue);
-        }).catch(() => {});
-        if (valor) return;
-      }
-      const imageData = ctx.getImageData(0, 0, w, h);
-      const code = window.jsQR ? jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' }) : null;
-      if (code && code.data && code.data.trim()) procesarLectura(code.data.trim());
-    } catch(e) {}
-  }
-
-  function procesarLectura(val) {
-    val = String(val || '').trim();
-    if (!val || val === lastValue) return;
-    lastValue = val;
-    say('✅ Código QR reconocido: ' + val, 'ok');
-    send(val);
-    stop();
-  }
-
-  function captureSnapshot() {
-    if (!running || !video.videoWidth) {
-      say('Primero activa la cámara para capturar la imagen.', 'err');
-      return;
-    }
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    capturedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
-    preview.src = capturedDataUrl;
-    stop();
-    say('Fotografía capturada. Revisa la imagen y confirma, o vuelve a tomarla.', 'ok');
-    updateButtonVisibility();
-  }
-
-  function switchCamera() {
-    start(currentFacing === 'environment' ? 'user' : 'environment');
-  }
-
-  startQRBtn.onclick = () => start('environment');
-  switchQRBtn.onclick = switchCamera;
-  stopQRBtn.onclick = () => { stop(); say('Cámara detenida.'); };
-
-  startPhotoBtn.onclick = () => start('environment');
-  capturePhotoBtn.onclick = captureSnapshot;
-  switchPhotoBtn.onclick = switchCamera;
-  stopPhotoBtn.onclick = () => { stop(); say('Cámara detenida.'); };
-
-  acceptBtn.onclick = () => {
-    if (capturedDataUrl) {
-      send(capturedDataUrl);
-      say('✅ Fotografía guardada y vinculada a la recepción.', 'ok');
-    }
-  };
-
-  retakeBtn.onclick = () => {
-    capturedDataUrl = '';
-    preview.src = '';
-    start('environment');
-  };
-
-  function onRender(event) {
-    const args = (event && event.detail && event.detail.args) || (window.Streamlit && event.detail ? {} : {});
-    mode = (args.mode === 'photo') ? 'photo' : 'qr';
-    const targetH = Number(args.height || 400);
-    video.style.maxHeight = Math.max(220, Math.min(targetH, 620)) + 'px';
-
-    updateButtonVisibility();
-
-    // Un único intento automático; si el navegador lo bloquea, el botón verde queda siempre visible.
-    if (!running && !capturedDataUrl && !autoIntentado) {
-      autoIntentado = true;
-      if (mode === 'qr') {
-        say('Iniciando lector QR institucional. Si no abre, pulsa «Activar cámara trasera».');
-        start('environment');
-      } else {
-        say('Pulsa «Activar cámara trasera» para fotografiar las pertenencias.');
-      }
-    }
-    ajustarAlto();
-  }
-
-  window.addEventListener('message', e => {
-    if (e.data && e.data.type === 'streamlit:render') onRender(e);
-  });
-
-  if (window.Streamlit) {
-    Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
-    Streamlit.setComponentReady();
-    Streamlit.setFrameHeight(460);
-  }
-  ajustarAlto();
-})();
-</script>
-</body>
-</html>
-<a href="rawbt:base64,{payload_b64}" target="_top" style="...">
-  🖨️ Imprimir por Bluetooth (RawBT - Android)
-</a>
+with tab_rep:
+    encabezado_institucional("REPORTES Y EXCEL", "DOCUMENTACIÓN", "Exportación de operaciones")
+    visibles = vehiculos_visibles(st.session_state.vehiculos)
+    if visibles:
+        df_rep = pd.DataFrame(visibles)
+        st.dataframe(df_rep, use_container_width=True, hide_index=True)
