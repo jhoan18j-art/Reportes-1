@@ -1093,8 +1093,6 @@ def generar_ticket_prueba_impresion():
         " recibe y procesa los datos.",
         "------------------------------------",
     ]
-    
-    ]
     return "\n".join(lineas), f"CLUBPARK|PRUEBA|{ahora:%Y%m%d%H%M%S}"
 
 
