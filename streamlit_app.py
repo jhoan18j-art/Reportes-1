@@ -3657,23 +3657,16 @@ with tab_intel:
     col_i2.metric("Fallos registrados", len(fallos_imp))
     col_i3.metric("Último evento", eventos_imp[0]["fecha_hora"] if eventos_imp else "—")
     if fallos_imp:
-                por_etapa = {}
-                por_etapa = {}
-                por_etapa = {}
-                por_etapa = {}
+        por_etapa = {}
         for e in fallos_imp:
             clave = e.get("etapa", "OTRO")
             por_etapa[clave] = por_etapa.get(clave, 0) + 1
         detalle_etapas = " · ".join(
             f"{ETAPAS_IMPRESION.get(k, k)}: {v}" for k, v in por_etapa.items()
         )
-        
-        if fallos_imp:
-            st.warning("Fallos de impresión detectados → " + detalle_etapas)
-            st.dataframe(pd.DataFrame(fallos_imp[:10]), use_container_width=True, hide_index=True)
-        elif eventos_imp:
-            st.success("La impresión térmica opera sin fallos registrados.")
-        else:
-            st.caption("Aún no hay eventos de impresión: ejecuta la prueba de impresión en 🧪 Pruebas Operativas o en 🖨️ Re-Impresión Térmica.")
-            
-  
+        st.warning("Fallos de impresión detectados → " + detalle_etapas)
+        st.dataframe(pd.DataFrame(fallos_imp[:10]), use_container_width=True, hide_index=True)
+    elif eventos_imp:
+        st.success("La impresión térmica opera sin fallos registrados.")
+    else:
+        st.caption("Aún no hay eventos de impresión: ejecuta la prueba de impresión en 🧪 Pruebas Operativas o en 🖨️ Re-Impresión Térmica.")
