@@ -10,3 +10,5 @@ zxing-cpp
 pyzbar
 streamlit
 pandas
+google-genai
+
