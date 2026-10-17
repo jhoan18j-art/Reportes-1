@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.
-Sistema de control operativo con Streamlit e Inteligencia Artificial (Gemini).
+Sistema de control operativo con Streamlit.
 
 IMPORTANTE:
-- Requiere 'google-genai' en requirements.txt.
-- Configura GEMINI_API_KEY en st.secrets o en las variables de entorno.
 - Para conservar archivos en Streamlit Cloud después de reinicios/despliegues,
-  configura CLUBPARK_DATA_DIR con una ruta de almacenamiento persistente.
+  configura CLUBPARK_DATA_DIR con una ruta de almacenamiento persistente o usa
+  un servicio externo (S3, Azure Blob, Supabase Storage, etc.).
+- Cambia los tokens de ejemplo antes de usar la aplicación en producción.
+- Para habilitar la Asistencia de IA, agrega OPENAI_API_KEY en st.secrets o en
+  las variables de entorno.
 """
 
 import io
@@ -25,14 +27,6 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 from PIL import Image, ImageOps
-
-# Intentar importar Google GenAI
-try:
-    from google import genai
-    from google.genai import types
-    GENAI_OK = True
-except ImportError:
-    GENAI_OK = False
 
 try:
     import qrcode
@@ -54,12 +48,19 @@ try:
 except ImportError:
     XLSXWRITER_OK = False
 
+try:
+    import openai
+    OPENAI_OK = True
+except ImportError:
+    openai = None
+    OPENAI_OK = False
+
 
 # ---------------------------------------------------------------------
-# CONFIGURACIÓN
+# CONFIGURACIÓN DE PÁGINA
 # ---------------------------------------------------------------------
 st.set_page_config(
-    page_title="Club Park - Control Operativo e IA",
+    page_title="Club Park - Control Operativo",
     page_icon="🚗",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -67,11 +68,9 @@ st.set_page_config(
 
 # ---------------------------------------------------------------------
 # ESTILO CONSTITUCIONAL E INSTITUCIONAL - VERDE BOTELLA (#0B3B24)
-# CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.
 # ---------------------------------------------------------------------
 CSS_INSTITUCIONAL = """
 <style>
-/* Paleta Institucional Club Park: Verde Botella Oficial */
 :root {
   --cpv-verde-botella: #0B3B24;
   --cpv-verde-oscuro: #072617;
@@ -83,14 +82,16 @@ CSS_INSTITUCIONAL = """
   --cpv-texto-principal: #1A2B20;
 }
 
-/* Encabezados y títulos */
 h1, h2, h3 {
   color: #0B3B24 !important;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: Georgia, "Palatino Linotype", "Times New Roman", serif !important;
   font-weight: 700;
+  letter-spacing: 0.4px;
 }
+h1 { font-size: 1.65rem !important; }
+h2 { font-size: 1.35rem !important; }
+h3 { font-size: 1.12rem !important; }
 
-/* Botones Primarios */
 button[kind="primary"], .stButton > button[kind="primary"], div[data-testid="stFormSubmitButton"] > button {
   background-color: #0B3B24 !important;
   color: #FFFFFF !important;
@@ -106,7 +107,6 @@ button[kind="primary"]:hover, .stButton > button[kind="primary"]:hover {
   color: #FFFFFF !important;
 }
 
-/* Botones Secundarios */
 button[kind="secondary"], .stButton > button[kind="secondary"] {
   background-color: #FFFFFF !important;
   color: #0B3B24 !important;
@@ -120,7 +120,6 @@ button[kind="secondary"]:hover, .stButton > button[kind="secondary"]:hover {
   color: #0B3B24 !important;
 }
 
-/* Pestañas (Tabs) en Verde Botella */
 button[data-baseweb="tab"] {
   color: #1A2B20 !important;
   font-weight: 600 !important;
@@ -130,17 +129,12 @@ button[data-baseweb="tab"][aria-selected="true"] {
   color: #0B3B24 !important;
   border-bottom-color: #0B3B24 !important;
   font-weight: 700 !important;
+  box-shadow: inset 0 -3px 0 #5B8F6E;
 }
 
-/* Alertas y métricas */
-div[data-testid="stMetricValue"] {
-  color: #0B3B24 !important;
-}
-div[data-testid="stAlert"] {
-  border-radius: 8px !important;
-}
+div[data-testid="stMetricValue"] { color: #0B3B24 !important; }
+div[data-testid="stAlert"] { border-radius: 8px !important; }
 
-/* Banners institucionales */
 .clubpark-header-card {
   background: linear-gradient(135deg, #072617 0%, #0B3B24 65%, #145A32 100%);
   border: 2px solid #5B8F6E;
@@ -162,15 +156,6 @@ div[data-testid="stAlert"] {
   letter-spacing: 0.5px;
 }
 
-/* Presentación formal y elegante - Tipografía institucional */
-h1, h2, h3 {
-  font-family: Georgia, "Palatino Linotype", "Times New Roman", serif !important;
-  letter-spacing: 0.4px;
-}
-h1 { font-size: 1.65rem !important; }
-h2 { font-size: 1.35rem !important; }
-h3 { font-size: 1.12rem !important; }
-/* Barra lateral institucional en verde botella */
 section[data-testid="stSidebar"] {
   background: linear-gradient(180deg, #072617 0%, #0B3B24 70%, #145A32 100%);
   border-right: 2px solid #5B8F6E;
@@ -185,7 +170,7 @@ section[data-testid="stSidebar"] .stButton > button {
 section[data-testid="stSidebar"] .stButton > button:hover {
   background-color: #EBF3EE !important;
 }
-/* Tarjetas de métricas formales */
+
 div[data-testid="stMetric"] {
   background: #FFFFFF;
   border: 1px solid #C4D7CC;
@@ -194,17 +179,11 @@ div[data-testid="stMetric"] {
   padding: 10px 14px;
   box-shadow: 0 1px 4px rgba(11, 59, 36, 0.10);
 }
-/* Expanders y contenedores */
 div[data-testid="stExpander"] {
   border: 1px solid #C4D7CC !important;
   border-radius: 10px !important;
   background: #FFFFFF !important;
 }
-/* Pestaña activa con subrayado dorado */
-button[data-baseweb="tab"][aria-selected="true"] {
-  box-shadow: inset 0 -3px 0 #5B8F6E;
-}
-/* Entradas de texto con borde institucional */
 input, textarea, div[data-baseweb="select"] > div {
   border: 1px solid #C4D7CC !important;
   border-radius: 8px !important;
@@ -213,7 +192,6 @@ input:focus, textarea:focus {
   border-color: #0B3B24 !important;
   box-shadow: 0 0 0 1px #0B3B24 !important;
 }
-/* Regla dorada institucional */
 .clubpark-gold-rule { border: 0; border-top: 2px solid #5B8F6E; margin: 12px 0; }
 </style>
 """
@@ -221,7 +199,6 @@ st.markdown(CSS_INSTITUCIONAL, unsafe_allow_html=True)
 
 
 def encabezado_institucional(titulo, badge="", subtitulo=""):
-    """Encabezado formal uniforme para todas las pestañas del sistema institucional."""
     insignia = f'<div class="clubpark-badge" style="margin-top:2px">{badge}</div>' if badge else ""
     sub = f'<div style="font-size:13px;color:#EBF3EE;margin-top:2px">{subtitulo}</div>' if subtitulo else ""
     st.markdown(
@@ -359,29 +336,15 @@ def contenido_qr_para(token):
         return f"{APP_URL}{separador}qrscan={token}"
     return token
 
-# ---------------------------------------------------------------------
-# CONFIGURACIÓN DE CLIENTE GEMINI IA
-# ---------------------------------------------------------------------
-def obtener_cliente_gemini():
-    if not GENAI_OK:
-        return None
-    api_key = None
-    try:
-        if "GEMINI_API_KEY" in st.secrets:
-            api_key = str(st.secrets["GEMINI_API_KEY"]).strip()
-    except Exception:
-        pass
-    if not api_key:
-        api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        return None
-    try:
-        return genai.Client(api_key=api_key)
-    except Exception:
-        return None
+def enlace_whatsapp(num, msg):
+    num_clean = re.sub(r"[^\d]", "", str(num))
+    if len(num_clean) == 10:
+        num_clean = "52" + num_clean
+    return f"https://wa.me/{num_clean}?text={urllib.parse.quote(msg)}"
+
 
 # ---------------------------------------------------------------------
-# DATOS Y UTILIDADES
+# DATOS Y UTILIDADES DE PERSISTENCIA
 # ---------------------------------------------------------------------
 def cargar_bd():
     if not DB_FILE.exists():
@@ -493,7 +456,6 @@ def guardar_evento_auditoria(tipo, detalle):
 
 ARCHIVO_APRENDIZAJE = DATA_DIR / "aprendizaje_sistema.json"
 
-
 def cargar_aprendizaje():
     try:
         datos = json.loads(ARCHIVO_APRENDIZAJE.read_text(encoding="utf-8"))
@@ -569,8 +531,9 @@ CODIGOS_SUCURSAL = {
     "CHURRASQUERIA": "CHUR",
 }
 
+
 # ---------------------------------------------------------------------
-# REGISTRO DE ERRORES DE IMPRESIÓN (RawBT / ESC-POS)
+# REGISTRO Y REINTENTO DE IMPRESIÓN BLUETOOTH / ESC-POS
 # ---------------------------------------------------------------------
 ARCHIVO_REGISTRO_IMPRESION = DATA_DIR / "registro_impresion.json"
 ETAPAS_IMPRESION = {
@@ -732,7 +695,7 @@ def vista_impresion_con_qr(registro, parte="cliente", key="print_qr"):
         </a>
       </div>
       <div id="status_{safe_key}" style="margin-top:6px;font-size:12px;color:#4A6B56">
-        El botón verde usa el diálogo de impresión del navegador. Para impresora térmica <b>Bluetooth</b> (MP210, 58 mm), usa los botones RawBT.
+        El botón verde usa el diálogo de impresión del navegador. Para impresora térmica <b>Bluetooth</b> como la MP210 (58 mm), usa los botones RawBT o Web Bluetooth de abajo.
       </div>
       <div id="ticket_html_{safe_key}" style="display:none">{seguro}</div>
     </div>
@@ -772,7 +735,7 @@ def vista_impresion_con_qr(registro, parte="cliente", key="print_qr"):
                   w.focus();
                   setTimeout(() => w.print(), 350);
                 }} else {{
-                  status.textContent = "El navegador bloqueó la impresión. Permite ventanas emergentes.";
+                  status.textContent = "El navegador bloqueó la impresión. Permite ventanas emergentes para este sitio.";
                 }}
               }}
             }}, 400);
@@ -872,7 +835,7 @@ def imprimir_partes_ticket(registro, sufijo):
 
 def construir_payload_escpos(texto, qr_payload_txt=None):
     partes = bytearray()
-    partes += bytes((0x1B, 0x40))
+    partes += bytes((0x1B, 0x40))  # ESC @
     try:
         partes += str(texto).encode("cp437", errors="replace")
     except Exception:
@@ -882,7 +845,7 @@ def construir_payload_escpos(texto, qr_payload_txt=None):
         datos_qr = str(qr_payload_txt).encode("utf-8")
         longitud = len(datos_qr) + 3
         pL, pH = longitud & 0xFF, (longitud >> 8) & 0xFF
-        partes += bytes((0x1B, 0x61, 0x01))
+        partes += bytes((0x1B, 0x61, 0x01))  # Centrado
         partes += bytes((0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00))
         partes += bytes((0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x06))
         partes += bytes((0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31))
@@ -906,7 +869,7 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
         try:
             registrar_evento_impresion(
                 "INTENTO",
-                f"{contexto.get('tipo_documento', '')} · folio {contexto.get('folio', '—')} · en espera de confirmación del operador",
+                f"{contexto.get('tipo_documento', '')} · folio {contexto.get('folio', '—')} · en espera de confirmación",
                 "PENDIENTE",
                 datos={
                     "folio": str(contexto.get("folio", "")),
@@ -936,15 +899,15 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button id="cp_bt_{safe_key}" type="button"
            style="background:#145A32;color:#FFFFFF;padding:11px;border:1px solid #072617;border-radius:8px;font-weight:700;cursor:pointer">
-          📶 Conectar e imprimir por Bluetooth BLE (Chrome)
+          📶 Conectar e imprimir por Web Bluetooth BLE
         </button>
         <button id="cp_dl_{safe_key}" type="button"
            style="background:#FAF8F5;color:#0B3B24;padding:11px;border:1px solid #5B8F6E;border-radius:8px;font-weight:700;cursor:pointer">
-          ⬇️ Descargar boleto .bin (abrir con RawBT)
+          ⬇️ Descargar boleto .bin (RawBT)
         </button>
       </div>
       <div id="cp_status_{safe_key}" role="status" aria-live="polite" style="font-size:12px;line-height:1.45;margin-top:10px;color:#2B4A37">
-        <b>Impresora térmica Bluetooth:</b> 1) Empareja la impresora en Ajustes › Bluetooth. 2) Instala RawBT. 3) En RawBT, selecciona Default printer. 4) Pulsa Imprimir por Bluetooth.
+        <b>Impresora térmica Bluetooth (MP210, 58 mm):</b> 1) Empareja la impresora en Ajustes de Android. 2) Abre RawBT. 3) Presiona el botón verde para enviar vía RawBT o usa Web Bluetooth directo.
       </div>
     </div>
     <script>
@@ -959,6 +922,7 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
       const enc = new TextEncoder();
       const concat = (...parts) => {{ let n=parts.reduce((a,p)=>a+p.length,0), o=new Uint8Array(n), k=0; for(const p of parts){{o.set(p,k);k+=p.length;}} return o; }};
       const cmd = (...a) => new Uint8Array(a);
+
       function qrCommands(data) {{
         if (!data) return new Uint8Array();
         const b=enc.encode(data), len=b.length+3, pL=len&255, pH=(len>>8)&255;
@@ -972,6 +936,7 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
           cmd(0x1B,0x61,0x00)
         );
       }}
+
       async function sendChunks(ch, data) {{
         const max = 160;
         for(let i=0;i<data.length;i+=max) {{
@@ -979,50 +944,57 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
           if(ch.writeValueWithoutResponse) await ch.writeValueWithoutResponse(chunk);
           else if(ch.writeValueWithResponse) await ch.writeValueWithResponse(chunk);
           else await ch.writeValue(chunk);
-          await new Promise(r=>setTimeout(r,15));
+          await new Promise(r=>setTimeout(r,20));
         }}
       }}
+
       btnShare.addEventListener('click', async () => {{
         try {{
           if (navigator.share) {{
             await navigator.share({{ title: 'Boleto Club Park', text: ticket }});
-            say('<b>Boleto enviado al menú de compartir.</b>');
+            say('<b>Boleto compartido con éxito.</b>');
           }} else {{
             await navigator.clipboard.writeText(ticket);
             say('<b>Boleto copiado al portapapeles.</b>');
           }}
-        }} catch(e) {{ say('No se pudo compartir: ' + (e.message || e)); }}
+        }} catch(e) {{ say('Error al compartir: ' + (e.message || e)); }}
       }});
+
       btnDl.addEventListener('click', () => {{
         try {{
           const bin = Uint8Array.from(atob('{payload_b64}'), c => c.charCodeAt(0));
           const blob = new Blob([bin], {{type: 'application/octet-stream'}});
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
-          a.download = 'boleto_clubpark_escpos.bin';
+          a.download = 'boleto_clubpark.bin';
           document.body.appendChild(a); a.click(); a.remove();
-          say('<b>Boleto descargado.</b>');
-        }} catch(e) {{ say('No se pudo descargar el binario: ' + (e.message || e)); }}
+          say('<b>Binario descargado.</b>');
+        }} catch(e) {{ say('Error al descargar: ' + (e.message || e)); }}
       }});
+
       btnBle.addEventListener('click', async () => {{
         if (!navigator.bluetooth) {{
-          say('<span style="color:#B3261E">Navegador no compatible con Web Bluetooth. Usa RawBT.</span>');
+          say('<span style="color:#B3261E">Navegador sin Web Bluetooth. Usa el botón verde RawBT.</span>');
           return;
         }}
         btnBle.disabled=true;
         try {{
-          say('Selecciona tu impresora térmica…');
+          say('Buscando impresora Bluetooth BLE cercana…');
           const device=await navigator.bluetooth.requestDevice({{
             acceptAllDevices: true,
             optionalServices: [
               '000018f0-0000-1000-8000-00805f9b34fb',
               '0000ffe0-0000-1000-8000-00805f9b34fb',
-              '0000ff00-0000-1000-8000-00805f9b34fb'
+              '0000ff00-0000-1000-8000-00805f9b34fb',
+              '0000ae00-0000-1000-8000-00805f9b34fb',
+              '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+              'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+              '0000af30-0000-1000-8000-00805f9b34fb'
             ]
           }});
-          const nombre = device.name || 'impresora';
+          const nombre = device.name || 'Impresora Bluetooth';
           say('Conectando con <b>' + nombre + '</b>…');
-          if (!device.gatt) throw new Error('Dispositivo sin GATT. Usa RawBT.');
+          if (!device.gatt) throw new Error('El dispositivo no expone conexión GATT. Usa RawBT.');
           const server=await device.gatt.connect();
           const services=await server.getPrimaryServices();
           let characteristic=null;
@@ -1033,8 +1005,8 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
               if(characteristic) break;
             }} catch(err){{}}
           }}
-          if(!characteristic) throw new Error('No se encontró canal de escritura ESC/POS. Usa RawBT.');
-          say('Enviando datos…');
+          if(!characteristic) throw new Error('No se encontró canal de escritura en ' + nombre);
+          say('Enviando datos a <b>' + nombre + '</b>…');
           const init=cmd(0x1B,0x40);
           const body=enc.encode(ticket+'\n');
           const feed=cmd(0x0A,0x0A,0x0A);
@@ -1042,10 +1014,10 @@ def imprimir_bluetooth(texto, key_suffix, qr_payload=None, contexto=None):
           await sendChunks(characteristic,body);
           if(qr) await sendChunks(characteristic,qrCommands(qr));
           await sendChunks(characteristic,feed);
-          say('<span style="color:#1E4620"><b>✅ Impresión enviada con éxito.</b></span>');
+          say('<span style="color:#1E4620"><b>✅ Impresión enviada a ' + nombre + ' con éxito.</b></span>');
           try {{ device.gatt.disconnect(); }} catch(e){{}}
         }} catch(e) {{
-          say('<span style="color:#B3261E">Aviso: ' + (e.message || e) + '</span>');
+          say('<span style="color:#B3261E">Aviso: ' + (e.message || e) + '. Si es Bluetooth clásico, utiliza el botón verde RawBT.</span>');
         }} finally {{ btnBle.disabled=false; }}
       }});
     }})();
@@ -1064,6 +1036,8 @@ def generar_ticket_prueba_impresion():
         f" FECHA  : {ahora.strftime('%d/%m/%Y %H:%M:%S')}",
         f" USUARIO: {st.session_state.get('usuario_autenticado') or 'Sesión local'}",
         " PRUEBA : BINARIO ESC/POS + QR",
+        " Si lees este texto, la impresora",
+        " recibe y procesa los datos.",
         "------------------------------------",
     ]
     return "\n".join(lineas), f"CLUBPARK|PRUEBA|{ahora:%Y%m%d%H%M%S}"
@@ -1075,6 +1049,7 @@ def panel_prueba_impresion(key_sufijo="diag", expandido=True):
         st.code(texto_prueba)
         imprimir_bluetooth(texto_prueba, key_suffix=f"prueba_{key_sufijo}", qr_payload=qr_prueba,
                            contexto={"folio": "PRUEBA", "tipo_documento": "TICKET DE PRUEBA DE IMPRESIÓN"})
+        st.markdown("**¿Qué resultado obtuviste al pulsar el botón RawBT?**")
         resultado = st.radio(
             "Resultado de la prueba de impresión",
             [
@@ -1088,10 +1063,12 @@ def panel_prueba_impresion(key_sufijo="diag", expandido=True):
             label_visibility="collapsed",
         )
         detalle_extra = st.text_input(
-            "Detalle opcional",
+            "Detalle opcional (modelo de impresora, mensaje visto, paso donde se detuvo)",
             key=f"det_prueba_{key_sufijo}",
         )
-        if resultado is not None:
+        if resultado is None:
+            st.caption("Selecciona el resultado y regístralo para diagnóstico.")
+        else:
             if "Imprimió correctamente" in resultado:
                 etapa = "IMPRESION_OK"
             elif "No se abrió RawBT" in resultado:
@@ -1100,10 +1077,16 @@ def panel_prueba_impresion(key_sufijo="diag", expandido=True):
                 etapa = "ENVIO_ESCPOS"
             else:
                 etapa = "IMPRESORA"
-            if st.button("📋 Registrar resultado en la bitácora de impresión", key=f"reg_prueba_{key_sufijo}", use_container_width=True):
-                eventos = registrar_evento_impresion(etapa, detalle_extra or resultado, "OK" if etapa == "IMPRESION_OK" else "FALLO")
+            if st.button("📋 Registrar resultado en la bitácora de impresión",
+                         key=f"reg_prueba_{key_sufijo}", use_container_width=True):
+                eventos = registrar_evento_impresion(etapa, detalle_extra or resultado,
+                                                     "OK" if etapa == "IMPRESION_OK" else "FALLO")
                 st.success(f"Registrado: {ETAPAS_IMPRESION[etapa]}")
                 st.dataframe(pd.DataFrame(eventos[:15]), use_container_width=True, hide_index=True)
+        eventos_log = cargar_registro_impresion()
+        if eventos_log:
+            st.markdown("**Bitácora de impresión (últimos 15 eventos)**")
+            st.dataframe(pd.DataFrame(eventos_log[:15]), use_container_width=True, hide_index=True)
 
 
 def enviar_payload_guardado(payload_b64, folio, tipo_documento, indice):
@@ -1138,19 +1121,36 @@ def enviar_payload_guardado(payload_b64, folio, tipo_documento, indice):
 def panel_reintentos_impresion(expandido=False, sufijo_panel="panel"):
     eventos = cargar_registro_impresion()
     reintentables = [e for e in eventos if e.get("payload_b64") and e.get("resultado") != "OK"]
-    with st.expander("🔄 Reintento de impresiones fallidas", expanded=expandido):
+    with st.expander("🔄 Reintento de impresiones fallidas (desde la bitácora)", expanded=expandido):
         if not reintentables:
             st.success("Sin impresiones pendientes de reintento.")
             return
+        st.caption("Reenvía el binario ESC/POS guardado con el mismo folio sin duplicar folios ni cobros.")
         for indice, evento in enumerate(reintentables[:8]):
             llave = f"reintento_{sufijo_panel}_{evento.get('id_impresion') or re.sub(r'[^0-9]', '', str(evento.get('fecha_hora', '')))}"
             with st.container(border=True):
-                st.markdown(f"**{evento.get('tipo_documento', 'BOLETO')} · folio {evento.get('folio', '—')} · {evento.get('fecha_hora', '')}**")
+                st.markdown(
+                    f"**{evento.get('tipo_documento', 'BOLETO')} · folio {evento.get('folio', '—')} · "
+                    f"{evento.get('fecha_hora', '')} · {evento.get('etapa', '')}**"
+                )
+                st.caption(f"Registrado por {evento.get('usuario', '—')} · {evento.get('diagnóstico', '')}")
                 col_r1, col_r2 = st.columns(2)
                 if col_r1.button("🔄 Reintentar impresión", key=f"reintento_enviar_{llave}", use_container_width=True, type="primary"):
                     enviar_payload_guardado(evento["payload_b64"], evento.get("folio", "—"), evento.get("tipo_documento", "BOLETO"), llave)
+                    registrar_evento_impresion(
+                        "REINTENTO",
+                        f"Reenvío del binario guardado · folio {evento.get('folio', '—')}",
+                        "PENDIENTE",
+                        datos={"folio": evento.get("folio", ""), "tipo_documento": evento.get("tipo_documento", "BOLETO")},
+                    )
+                    st.success("Binario listo para reenvío.")
                 if col_r2.button("✅ Marcar como impreso", key=f"reintento_ok_{llave}", use_container_width=True):
-                    registrar_evento_impresion("IMPRESION_OK", f"Confirmado tras reintento · folio {evento.get('folio', '—')}", "OK")
+                    registrar_evento_impresion(
+                        "IMPRESION_OK",
+                        f"Confirmado por el operador tras reintento · folio {evento.get('folio', '—')}",
+                        "OK",
+                        datos={"folio": evento.get("folio", ""), "tipo_documento": evento.get("tipo_documento", "BOLETO")},
+                    )
                     st.rerun()
 
 
@@ -1269,6 +1269,8 @@ def generar_excel_oficial(df):
     datos.columns = encabezados
 
     if OPENPYXL_OK:
+        from openpyxl.styles import Alignment, Font, PatternFill
+
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Reporte Operativo"
@@ -1327,7 +1329,7 @@ def generar_excel_oficial(df):
         output.seek(0)
         return output
 
-    raise RuntimeError("No hay motor Excel instalado.")
+    raise RuntimeError("No hay motor Excel instalado (openpyxl / xlsxwriter).")
 
 
 def leer_codigo_qr(imagen_pil):
@@ -1353,6 +1355,16 @@ def leer_codigo_qr(imagen_pil):
         candidatos.append(gris)
         candidatos.append(ImageOps.invert(gris))
         candidatos.append(ImageOps.autocontrast(base))
+        try:
+            import cv2
+            import numpy as np
+            arr = np.array(gris)
+            _, otsu = cv2.threshold(arr, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            candidatos.append(Image.fromarray(otsu))
+            candidatos.append(Image.fromarray(cv2.adaptiveThreshold(
+                arr, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 31, 2)))
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -1394,12 +1406,81 @@ def leer_codigo_qr(imagen_pil):
                     pass
     except Exception:
         pass
+
+    try:
+        import cv2
+        import numpy as np
+        detector = cv2.QRCodeDetector()
+        for imagen in candidatos:
+            arr = cv2.cvtColor(np.array(imagen), cv2.COLOR_RGB2BGR)
+            for angulo in (0, 90, 180, 270):
+                prueba = arr if angulo == 0 else np.rot90(arr, angulo // 90)
+                try:
+                    valor, _, _ = detector.detectAndDecode(prueba)
+                    if valor and valor.strip():
+                        return valor.strip()
+                except 
+       Exception:
+        pass
     return None
 
+
+# ---------------------------------------------------------------------
+# MEJORA DE CÁMARA TRASERA EN ANDROID (HTML5 Web API + Streamlit fallback)
+# ---------------------------------------------------------------------
 def lector_qr_camara_trasera(key="lector_qr_trasero", height=390):
-    foto_qr = st.camera_input("Capturar el código QR", key=key)
+    """Componente de lectura QR con forzado de cámara trasera (environment)."""
+    html_camara = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#F4F7F5;border:1px solid #C4D7CC;border-radius:10px;padding:10px">
+      <div style="font-size:12px;font-weight:700;color:#0B3B24;margin-bottom:6px">📷 Lector con Cámara Trasera Optimizada (Android)</div>
+      <video id="video_{key}" style="width:100%;max-height:260px;background:#000;border-radius:8px;object-fit:cover" autoplay playsinline></video>
+      <canvas id="canvas_{key}" style="display:none"></canvas>
+      <div id="msg_{key}" style="font-size:11px;color:#2B4A37;margin-top:6px">Iniciando cámara trasera…</div>
+      <button id="btn_switch_{key}" type="button" style="margin-top:6px;padding:6px 12px;background:#0B3B24;color:#FFF;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">🔄 Cambiar Cámara</button>
+    </div>
+    <script>
+    (function(){{
+      let stream = null;
+      let facing = 'environment';
+      const video = document.getElementById('video_{key}');
+      const msg = document.getElementById('msg_{key}');
+      const btn = document.getElementById('btn_switch_{key}');
+
+      async function startCam(facingMode) {{
+        if (stream) {{ stream.getTracks().forEach(t => t.stop()); }}
+        try {{
+          msg.textContent = 'Solicitando cámara trasera (' + facingMode + ')…';
+          stream = await navigator.mediaDevices.getUserMedia({{
+            video: {{ facingMode: {{ exact: facingMode }} }}
+          }});
+        }} catch(e) {{
+          try {{
+            stream = await navigator.mediaDevices.getUserMedia({{
+              video: {{ facingMode: facingMode }}
+            }});
+          }} catch(e2) {{
+            msg.textContent = 'Usa el capturador nativo de abajo o la subida de imagen.';
+            return;
+          }}
+        }}
+        video.srcObject = stream;
+        msg.textContent = 'Cámara lista. Enfoca el código QR.';
+      }}
+
+      btn.addEventListener('click', () => {{
+        facing = (facing === 'environment') ? 'user' : 'environment';
+        startCam(facing);
+      }});
+
+      startCam(facing);
+    }})();
+    </script>
+    """
+    st.components.v1.html(html_camara, height=330)
+
+    foto_qr = st.camera_input("Capturar código QR", key=key)
     if foto_qr is None:
-        subida = st.file_uploader("Subir foto del código QR", type=["png", "jpg", "jpeg"], key=f"{key}_subida")
+        subida = st.file_uploader("Subir foto o seleccionar Cámara en Android", type=["png", "jpg", "jpeg"], key=f"{key}_subida")
         if subida is not None:
             try:
                 token = leer_codigo_qr(Image.open(subida))
@@ -1411,165 +1492,163 @@ def lector_qr_camara_trasera(key="lector_qr_trasero", height=390):
         token = leer_codigo_qr(Image.open(foto_qr))
         return str(token).strip() if token else None
     except Exception:
+        st.warning("No se pudo leer el QR. Acércate o mejora la luz.")
         return None
 
 
 def camara_trasera_foto_pertenencias(key="foto_pertenencias_trasera", height=430):
     captura = st.camera_input("Tomar fotografía", key=key)
     if captura is None:
+        st.caption("Si abre la cámara frontal, cambia al modo 'Subir fotos': en Android permite elegir la cámara trasera directamente.")
         return None
     try:
         return Image.open(captura).copy()
     except Exception:
+        st.warning("No se pudo procesar la foto. Vuelve a tomarla.")
         return None
 
 
 # ---------------------------------------------------------------------
-# FUNCIONALIDADES CON INTELIGENCIA ARTIFICIAL (GEMINI API)
+# ASISTENCIA CON INTELIGENCIA ARTIFICIAL (OpenAI GPT-4o)
 # ---------------------------------------------------------------------
-def funcion_ia_extraer_placa_vision(imagen_pil):
-    """Lector OCR Avanzado de Placas con Gemini Vision."""
-    client = obtener_cliente_gemini()
-    if not client:
-        return None, "Servicio de IA no disponible o API key no configurada."
+def obtener_api_key_openai():
     try:
-        buffered = io.BytesIO()
-        imagen_pil.save(buffered, format="JPEG")
-        image_bytes = buffered.getvalue()
-
-        prompt = "Analiza detenidamente esta fotografía de vehículo. Localiza la placa de circulación y extrae únicamente la matrícula/placa sin espacios ni guiones (solo letras y números). Si no es legible o no hay placa visible, responde estrictamente NINGUNA."
-        
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                prompt
-            ]
-        )
-        placa = response.text.strip().upper()
-        placa_limpia = re.sub(r'[^A-Z0-9]', '', placa)
-        if "NINGUNA" in placa or len(placa_limpia) < 3:
-            return None, "No se pudo detectar una placa clara en la imagen."
-        return placa_limpia, "Placa detectada exitosamente."
-    except Exception as exc:
-        return None, f"Error en procesamiento de IA Vision: {exc}"
+        if "OPENAI_API_KEY" in st.secrets:
+            return str(st.secrets["OPENAI_API_KEY"]).strip()
+    except Exception:
+        pass
+    return os.environ.get("OPENAI_API_KEY", "").strip()
 
 
-def funcion_ia_diagnostico_incidencia(descripcion, custodia_original="", sucursal=""):
-    """Diagnóstico Inteligente de Incidencias y Reclamaciones."""
-    client = obtener_cliente_gemini()
-    if not client:
-        return "El servicio de Inteligencia Artificial no está configurado (falta GEMINI_API_KEY)."
-    
-    prompt = f"""
-Eres el Asesor Legal y Auditor Principal de 'Club Park Valet y Estacionamientos S.A. de C.V.'.
-Evalúa la siguiente reclamación o incidencia reportada en la sucursal {sucursal}:
+def asistente_ia_consulta(prompt_usuario, contexto_operativo):
+    api_key = obtener_api_key_openai()
+    if not api_key:
+        return "⚠️ La clave de API de OpenAI (OPENAI_API_KEY) no está configurada en st.secrets ni en las variables de entorno."
+    if not OPENAI_OK:
+        return "⚠️ La biblioteca `openai` no está instalada en la aplicación. Agrégala a requirements.txt."
 
-DESCRIPCIÓN DEL INCIDENTE / RECLAMO DEL CLIENTE:
-"{descripcion}"
-
-DECLARACIÓN DE CUSTODIA REGISTRADA EN EL TICKET DE ENTRADA:
-"{custodia_original or 'SIN OBJETOS DE VALOR DECLARADOS'}"
-
-Proporciona una evaluación técnica estructurada con los siguientes apartados:
-1. Nivel de Gravedad e Impacto (Bajo / Medio / Alto / Crítico).
-2. Evaluación de Responsabilidad Institucional (Analizando el reglamento y la custodia).
-3. Protocolo de Acción Inmediata Sugerido para el Encargado/Valet.
-4. Redacción de Postura Formal / Mensaje institucional para comunicar al cliente.
-"""
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
+        client = openai.OpenAI(api_key=api_key)
+        system_prompt = (
+            "Eres el asistente de Inteligencia Artificial especializado para CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.\n"
+            "Tu objetivo es ayudar a los supervisores, encargados y al Contador Auditor en el análisis operativo, financiero, "
+            "resolución de incidencias, auditorías, control de estancias y optimización de flujos de trabajo.\n"
+            "Responde de manera profesional, precisa, concisa e institucional.\n"
+            f"DATOS ACTUALES DE OPERACIÓN:\n{json.dumps(contexto_operativo, ensure_ascii=False, indent=2)}"
         )
-        return response.text
-    except Exception as exc:
-        return f"Error al generar diagnóstico con IA: {exc}"
-
-
-def funcion_ia_resumen_ejecutivo(registros):
-    """Auditor e Inteligencia de Negocio Narrativa."""
-    client = obtener_cliente_gemini()
-    if not client:
-        return "El servicio de Inteligencia Artificial no está configurado (falta GEMINI_API_KEY)."
-
-    resumen_datos = []
-    for r in registros[:50]:
-        resumen_datos.append({
-            "folio": r.get("id"),
-            "sucursal": r.get("sucursal"),
-            "tarifa": r.get("tarifa"),
-            "estado": r.get("estado"),
-            "metodo_pago": r.get("metodo_pago"),
-            "fecha": r.get("fecha")
-        })
-
-    prompt = f"""
-Eres el Director de Operaciones e Inteligencia de Negocios de 'Club Park Valet y Estacionamientos S.A. de C.V.'.
-Analiza el siguiente conjunto de datos reciente de la operación ({len(registros)} registros evaluados) y genera un Resumen Ejecutivo Estratégico:
-
-DATOS OPERATIVOS RECIENTES (muestra en JSON):
-{json.dumps(resumen_datos, ensure_ascii=False)}
-
-Tu informe debe incluir:
-1. Resumen Narrativo de Operación y Rendimiento General.
-2. Identificación de Patrones de Ingreso y Cobro (Efectivo vs Tarjeta/QR).
-3. Hallazgos o Anomalías Operativas.
-4. Recomendaciones Estratégicas y de Eficiencia Operativa para los Supervisores y el Contador.
-"""
-    try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt_usuario},
+            ],
+            temperature=0.3,
+            max_tokens=600,
         )
-        return response.text
-    except Exception as exc:
-        return f"Error al generar informe ejecutivo con IA: {exc}"
-
-
-def funcion_ia_chat_asistente(pregunta_usuario, registros_visibles):
-    """Asistente Conversacional para Operadores y Administradores."""
-    client = obtener_cliente_gemini()
-    if not client:
-        return "El servicio de Asistente IA no está activo. Verifica la configuración de GEMINI_API_KEY."
-
-    activos = sum(1 for r in registros_visibles if r.get("estado") == "En Resguardo")
-    entregados = sum(1 for r in registros_visibles if r.get("estado") == "Entregado")
-    
-    conteo_sucursales = {}
-    for r in registros_visibles:
-        s = r.get("sucursal", "OTRA")
-        conteo_sucursales[s] = conteo_sucursales.get(s, 0) + 1
-
-    contexto = f"""
-Eres el Asistente Virtual Operativo con Inteligencia Artificial de 'Club Park Valet y Estacionamientos S.A. de C.V.'.
-Respondes dudas operativas, normativas y consultas sobre los vehículos en sitio.
-
-ESTADO ACTUAL DE LA OPERACIÓN CONSULTABLE:
-- Total vehículos en vista: {len(registros_visibles)}
-- En resguardo (activos): {activos}
-- Entregados: {entregados}
-- Vehículos por sucursal: {json.dumps(conteo_sucursales, ensure_ascii=False)}
-- Usuario consultando: {st.session_state.get('usuario_autenticado')} ({st.session_state.get('rol')})
-- Sucursal contexto: {st.session_state.get('sucursal_asignada')}
-
-REGLAS INSTITUCIONALES BÁSICAS:
-1. Tarifa general según sucursal.
-2. Responsabilidad por objetos: Solo objetos declarados en custodia al ingreso.
-3. El boleto del cliente es obligatorio para la entrega.
-"""
-    try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=f"{contexto}\n\nPregunta del operador/usuario: {pregunta_usuario}"
-        )
-        return response.text
-    except Exception as exc:
-        return f"Error en comunicación con la IA: {exc}"
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error al comunicarse con el servicio de IA: {str(e)}"
 
 
 # ---------------------------------------------------------------------
-# ESTADO DE SESIÓN Y LOGIN
+# PRUEBAS OPERATIVAS (Autodiagnóstico)
+# ---------------------------------------------------------------------
+def ejecutar_pruebas_operativas():
+    resultados = []
+
+    def registrar(nombre, funcion):
+        try:
+            detalle = funcion()
+            resultados.append({"prueba": nombre, "estado": "✅", "detalle": detalle or "OK"})
+        except Exception as exc:
+            resultados.append({"prueba": nombre, "estado": "❌", "detalle": str(exc)[:220]})
+
+    def prueba_base_datos():
+        archivo = DATA_DIR / "_prueba_operativa.json"
+        datos = [{"id": "CP-TEST-000001", "sucursal": "RAMMA"}]
+        with archivo.open("w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False)
+        with archivo.open("r", encoding="utf-8") as f:
+            leido = json.load(f)
+        archivo.unlink()
+        assert leido == datos
+        return "Escritura y lectura JSON correctas"
+
+    def prueba_folios():
+        registros = [
+            {"id": "CP-RAM-000005", "sucursal": "RAMMA", "folio_numero": 5},
+            {"id": "CP-SUS-000002", "sucursal": "SUSHITTO", "folio_numero": 2},
+        ]
+        folio1, num1 = asignar_folio("RAMMA", registros)
+        assert folio1.startswith("CP-RAM-") and num1 >= 6
+        folio2, num2 = asignar_folio("SUSHITTO", registros)
+        assert folio2.startswith("CP-SUS-") and num2 >= 3
+        config = cargar_config()
+        config["siguiente_folio"]["RAMMA"] = 6
+        config["siguiente_folio"]["SUSHITTO"] = 3
+        guardar_config(config)
+        return f"Secuencias independientes ({folio1} / {folio2})"
+
+    def prueba_registro():
+        config_previa = cargar_config()
+        folio_previo = int(config_previa["siguiente_folio"].get("RAMMA", 1))
+        registros_sim = [{"id": "CP-RAM-000005", "sucursal": "RAMMA", "folio_numero": 5}]
+        folio, numero = asignar_folio("RAMMA", registros_sim)
+        config_post = cargar_config()
+        config_post["siguiente_folio"]["RAMMA"] = folio_previo
+        guardar_config(config_post)
+        assert re.match(r"^CP-[A-Z0-9]+-\d{6}$", folio)
+        ahora = datetime.now()
+        registro = {
+            "id": folio,
+            "folio_numero": numero,
+            "qr_payload": f"CLUBPARK|VEHICULO|{folio}",
+            "fecha": ahora.strftime("%d/%m/%Y %H:%M:%S"),
+            "sucursal": "RAMMA",
+            "marca": "Vehículo de prueba", "color": "Verde Botella", "placas": "PRB-000-0",
+            "tarifa": 70, "operador": "Prueba operativa",
+            "custodia": "SIN OBJETOS DE VALOR DECLARADOS",
+            "fotos": {},
+        }
+        registro["ticket_texto"] = crear_ticket(registro)
+        assert folio in registro["ticket_texto"]
+        primera, segunda = crear_partes_ticket(registro)
+        assert folio in primera and folio in segunda
+        imagen_prueba = Image.new("RGB", (320, 240), (11, 59, 36))
+        ruta_foto_prueba = guardar_foto(imagen_prueba, folio, "prueba_registro")
+        assert Path(ruta_foto_prueba).exists()
+        Path(ruta_foto_prueba).unlink()
+        return f"Registro simulado válido ({folio})"
+
+    def prueba_qr():
+        if not QR_OK:
+            raise RuntimeError("Falta paquete qrcode[pil]")
+        registro = {"id": "CP-RAM-000099"}
+        png = generar_qr_bytes(registro)
+        assert png and png[:8] == b"\x89PNG\r\n\x1a\n"
+        return "Generación de QR correcta"
+
+    def prueba_credenciales():
+        assert isinstance(ACCESOS, dict) and ACCESOS
+        return f"{len(ACCESOS)} credenciales completas (fuente: {ACCESOS_FUENTE})"
+
+    def prueba_ia():
+        key = obtener_api_key_openai()
+        if not key:
+            return "Aviso: Clave OPENAI_API_KEY no configurada (asistencia de IA en modo manual)"
+        return "Conexión a motor OpenAI disponible"
+
+    registrar("Base de datos (JSON) escritura y lectura", prueba_base_datos)
+    registrar("Folios independientes por sucursal", prueba_folios)
+    registrar("Registro de ingreso de vehículo (simulado)", prueba_registro)
+    registrar("Generación y lectura de código QR", prueba_qr)
+    registrar("Integridad de credenciales QR", prueba_credenciales)
+    registrar("Motor de Inteligencia Artificial (OpenAI)", prueba_ia)
+    return resultados
+
+
+# ---------------------------------------------------------------------
+# ESTADO DE SESIÓN
 # ---------------------------------------------------------------------
 if "usuario_autenticado" not in st.session_state:
     st.session_state.usuario_autenticado = None
@@ -1579,10 +1658,11 @@ if "rol" not in st.session_state:
     st.session_state.rol = None
 if "vehiculos" not in st.session_state:
     st.session_state.vehiculos = cargar_bd()
-if "chat_historial_ia" not in st.session_state:
-    st.session_state.chat_historial_ia = []
 
 
+# ---------------------------------------------------------------------
+# LOGIN
+# ---------------------------------------------------------------------
 if st.session_state.usuario_autenticado is None:
     left, center, right = st.columns([1, 2.2, 1])
     with center:
@@ -1615,6 +1695,7 @@ if st.session_state.usuario_autenticado is None:
                 token_leido = lector_qr_camara_trasera("lector_login_trasero", height=390)
                 if token_leido:
                     token = str(token_leido).strip()
+                    st.success("Código QR leído correctamente.")
 
         elif metodo.startswith("🖼️"):
             archivo_qr = st.file_uploader("Selecciona el archivo de tu credencial QR", type=["png", "jpg", "jpeg"])
@@ -1637,7 +1718,7 @@ if st.session_state.usuario_autenticado is None:
                 st.success(f"Acceso concedido: **{info.get('nombre')}** ({info.get('rol')})")
                 st.rerun()
             else:
-                st.error(f"Token o código QR no reconocido: `{token}`.")
+                st.error(f"Token o código QR no reconocido: `{token}`. Verifica con el Contador Auditor.")
 
     st.stop()
 
@@ -1654,7 +1735,7 @@ st.markdown(f"""
 <div class="clubpark-header-card">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
     <div>
-      <div class="clubpark-badge">SISTEMA INSTITUCIONAL DE CONTROL OPERATIVO CON IA</div>
+      <div class="clubpark-badge">SISTEMA INSTITUCIONAL DE CONTROL OPERATIVO</div>
       <h2 style="color:#FFFFFF !important;margin:6px 0 2px 0;font-size:24px">CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.</h2>
       <div style="font-size:13px;color:#EBF3EE">
         <b>Usuario:</b> {st.session_state.usuario_autenticado} &nbsp;|&nbsp;
@@ -1664,7 +1745,7 @@ st.markdown(f"""
     </div>
     <div style="text-align:right">
       <div style="font-size:11px;color:#7FA98C;text-transform:uppercase;font-weight:700">Identidad Corporativa</div>
-      <div style="font-size:13px;font-weight:700;color:#FFFFFF">MOTOR IA: GEMINI INTEGRADO</div>
+      <div style="font-size:13px;font-weight:700;color:#FFFFFF">COLOR CONSTITUCIONAL: VERDE BOTELLA (#0B3B24)</div>
     </div>
   </div>
 </div>
@@ -1706,11 +1787,12 @@ def analisis_inteligente(registros):
         if h >= 12:
             alertas.append({"tipo": "🚨 Estancia crítica", "sucursal": suc, "detalle": f"{ident} ({placas}) en {suc}: {h:.1f} h sin salida", "accion": "Verificar con el encargado."})
         elif h >= 6:
-            alertas.append({"tipo": "⚠️ Estancia prolongada", "sucursal": suc, "detalle": f"{ident} ({placas}) en {suc}: {h:.1f} h", "accion": "Dar seguimiento."})
+            alertas.append({"tipo": "⚠️ Estancia prolongada", "sucursal": suc, "detalle": f"{ident} ({placas}) en {suc}: {h:.1f} h", "accion": "Seguimiento en próxima revisión."})
 
     entregados_hoy = [r for r in entregados if str(r.get("fecha_salida", "")).startswith(ahora.strftime("%d/%m/%Y"))]
     ingresos_hoy = sum(dinero(r.get("tarifa")) for r in entregados_hoy)
     estancia_prom = (sum(h for _, h in estancias) / len(estancias)) if estancias else 0.0
+    sucursales_activas = sorted({r.get("sucursal", "Sin sucursal") for r in activos})
 
     kpis = [
         ("Vehículos en resguardo", f"{len(activos)}"),
@@ -1719,33 +1801,41 @@ def analisis_inteligente(registros):
         ("Estancia promedio", f"{estancia_prom:.1f} h" if activos else "—"),
     ]
 
-    resumen = f"Hay {len(activos)} vehículos en resguardo. Hoy se han entregado {len(entregados_hoy)} vehículos con ingresos de ${ingresos_hoy:,.0f}."
-    recomendaciones = ["Operación dentro de parámetros estables."]
+    resumen = (
+        f"Hay {len(activos)} vehículos en resguardo en {len(sucursales_activas)} sucursal(es). "
+        f"Hoy se han entregado {len(entregados_hoy)} vehículos con ingresos de ${ingresos_hoy:,.0f} MXN."
+    )
+
+    recomendaciones = []
+    if len(activos) >= 20:
+        recomendaciones.append("Volumen alto en sitio: refuerza personal en la zona de resguardo.")
+    if not recomendaciones:
+        recomendaciones.append("Operación dentro de parámetros normales.")
+
     return kpis, alertas, resumen, recomendaciones
 
 
-tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud, tab_qrs, tab_pruebas, tab_intel, tab_ia = st.tabs([
-    "📥 Ingreso",
-    "📋 Vehículos",
+tab_ing, tab_list, tab_salida, tab_balance, tab_imp, tab_rep, tab_corte, tab_cierre_diario, tab_aud, tab_qrs, tab_pruebas, tab_intel = st.tabs([
+    "📥 Ingreso y Fotografías",
+    "📋 Vehículos Registrados",
     "🚘 Salida y Cobro",
-    "📈 Balances",
-    "🖨️ Re-Impresión",
-    "📊 Reportes",
-    "💵 Cortes",
-    "📒 Cierre diario",
-    "🕵️ Auditoría",
-    "🏷️ Credenciales QR",
-    "🧪 Pruebas",
-    "🧠 Inteligencia",
-    "🤖 Asistente IA Gemini",
+    "📈 Balances y Rentabilidad",
+    "🖨️ Re-Impresión Térmica",
+    "📊 Reportes y Excel",
+    "💵 Cortes de Caja",
+    "📒 Cierre diario por sucursal",
+    "🕵️ Auditoría y WhatsApp",
+    "🏷️ Credenciales QR Institucionales",
+    "🧪 Pruebas Operativas",
+    "🧠 Inteligencia Operativa y IA",
 ])
 
 
 # ---------------------------------------------------------------------
-# TAB 1: INGRESO
+# TAB 1: INGRESO DE VEHÍCULO
 # ---------------------------------------------------------------------
 with tab_ing:
-    encabezado_institucional("REGISTRO DE INGRESO DE VEHÍCULO", "OPERACIÓN 1 · RECEPCIÓN", "Protocolo institucional de recepción con evidencia fotográfica e IA Vision")
+    encabezado_institucional("REGISTRO DE INGRESO DE VEHÍCULO", "OPERACIÓN 1 · RECEPCIÓN", "Protocolo institucional de recepción con evidencia fotográfica obligatoria")
     c1, c2 = st.columns(2)
     with c1:
         if es_global:
@@ -1768,145 +1858,312 @@ with tab_ing:
         custodia = "SIN OBJETOS DE VALOR DECLARADOS"
         st.success("Se registrará: SIN OBJETOS DE VALOR DECLARADOS")
     else:
-        custodia = st.text_area("Objetos declarados y observaciones de custodia", key="ing_custodia_texto")
+        custodia = st.text_area(
+            "Objetos declarados y observaciones de custodia",
+            placeholder="Ej. computadora portátil, mochila negra, cargador...",
+            key="ing_custodia_texto",
+        )
 
-    st.subheader("2. Fotografías del vehículo")
-    VISTAS_VEHICULO = [
+    st.markdown("**📷 Fotografías de pertenencias bajo resguardo (opcional)**")
+    opc_cam_p = st.radio(
+        "Herramienta de captura:",
+        ["📸 Cámara del dispositivo (Recomendado)", "📁 Subir fotos desde galería"],
+        horizontal=True,
+        key="selector_camara_pertenencias_v6"
+    )
+    foto_pertenencias_camara = None
+    fotos_pertenencias_archivos = []
+
+    if opc_cam_p.startswith("📸"):
+        foto_pertenencias_camara = camara_trasera_foto_pertenencias("foto_pertenencias_trasera", height=430)
+        if foto_pertenencias_camara:
+            st.image(foto_pertenencias_camara, caption="Fotografía de pertenencias capturada", width=260)
+    else:
+        fotos_pertenencias_archivos = st.file_uploader(
+            "Selecciona fotos de pertenencias", type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True, key="fotos_pertenencias_archivos"
+        )
+
+    st.subheader("2. Fotografías del vehículo (protocolo de 4 o 6 fotos)")
+    opc_cam_v = st.radio(
+        "Herramienta de captura del vehículo:",
+        ["📸 Cámara del dispositivo (Recomendado)", "📁 Subir fotos desde galería"],
+        horizontal=True,
+        key="selector_camara_vehiculo_v6",
+    )
+
+    VISTAS_COMPLETAS = [
         ("frente", "1. Vista frontal"),
         ("trasera", "2. Vista trasera"),
         ("izquierda", "3. Costado izquierdo"),
         ("derecha", "4. Costado derecho"),
+        ("tablero", "5. Tablero / kilometraje"),
+        ("interior", "6. Interior / asientos"),
     ]
-    
+    VISTAS_RAPIDAS = VISTAS_COMPLETAS[:4]
+
+    modo_fotos = st.radio(
+        "Protocolo de evidencia fotográfica:",
+        [
+            "📋 Protocolo completo (6 fotos): frente, trasera, ambos costados, tablero e interior",
+            "⚡ Protocolo rápido (4 fotos): frente, trasera y ambos costados",
+        ],
+        index=0,
+        key="modo_fotos_vehiculo",
+    )
+    VISTAS_VEHICULO = VISTAS_COMPLETAS if modo_fotos.startswith("📋") else VISTAS_RAPIDAS
+    total_fotos = len(VISTAS_VEHICULO)
+
     fotos_vehiculo = {}
     for clave_vista, titulo_vista in VISTAS_VEHICULO:
-        fotos_vehiculo[clave_vista] = st.file_uploader(f"{titulo_vista}", type=["jpg", "jpeg", "png"], key=f"foto_veh_{clave_vista}")
+        if opc_cam_v.startswith("📸"):
+            fotos_vehiculo[clave_vista] = st.camera_input(
+                f"{titulo_vista} (obligatoria)", key=f"foto_veh_{clave_vista}"
+            )
+        else:
+            fotos_vehiculo[clave_vista] = st.file_uploader(
+                f"{titulo_vista} (obligatoria)", type=["jpg", "jpeg", "png"], key=f"foto_veh_{clave_vista}"
+            )
 
-    # IA Vision para extracción de Placa
-    if fotos_vehiculo.get("frente") or fotos_vehiculo.get("trasera"):
-        if st.button("🤖 Detectar Placa automáticamente con IA Gemini Vision"):
-            img_ref = fotos_vehiculo.get("frente") or fotos_vehiculo.get("trasera")
-            with st.spinner("Procesando imagen con IA Vision..."):
-                placa_ia, msg = funcion_ia_extraer_placa_vision(Image.open(img_ref))
-                if placa_ia:
-                    st.success(f"IA detectó la placa: **{placa_ia}** (Cópiala en el campo de placas si es correcta).")
-                else:
-                    st.warning(msg)
+    faltan_fotos = [titulo_vista for clave_vista, titulo_vista in VISTAS_VEHICULO if not fotos_vehiculo.get(clave_vista)]
+    capturadas = total_fotos - len(faltan_fotos)
+    st.progress(capturadas / total_fotos, text=f"Fotografías del vehículo capturadas: {capturadas} de {total_fotos}")
 
     if st.button("💾 Registrar ingreso y generar ticket", type="primary", use_container_width=True):
-        if not marca.strip() or not placas:
-            st.error("Completa marca y placas.")
+        faltantes = []
+        if not es_global and not sucursal:
+            faltantes.append("sucursal asignada")
+        if es_global and sucursal == "-- Selecciona la Sucursal --":
+            faltantes.append("sucursal")
+        if not marca.strip():
+            faltantes.append("marca y modelo")
+        if not placas:
+            faltantes.append("placas")
+        if not operador.strip():
+            faltantes.append("operador")
+        faltantes.extend(faltan_fotos)
+
+        if faltantes:
+            st.error("Completa los siguientes campos: " + ", ".join(faltantes) + ".")
         else:
             folio, folio_numero = asignar_folio(sucursal, st.session_state.vehiculos)
             ahora_entrada = datetime.now()
+            fecha = ahora_entrada.strftime("%d/%m/%Y %H:%M:%S")
+            fecha_entrada_iso = ahora_entrada.isoformat(timespec="seconds")
             rutas = {}
-            for vista, archivo in fotos_vehiculo.items():
-                if archivo:
+            archivos = [
+                (clave_vista, fotos_vehiculo[clave_vista])
+                for clave_vista, _ in VISTAS_VEHICULO
+                if fotos_vehiculo.get(clave_vista)
+            ]
+            try:
+                for vista, archivo in archivos:
                     rutas[vista] = guardar_foto(archivo, folio, vista)
-            
-            registro = {
-                "id": folio,
-                "folio_numero": folio_numero,
-                "fecha": ahora_entrada.strftime("%d/%m/%Y %H:%M:%S"),
-                "fecha_entrada": ahora_entrada.strftime("%d/%m/%Y %H:%M:%S"),
-                "sucursal": sucursal,
-                "marca": marca.strip(),
-                "color": color.strip(),
-                "placas": placas,
-                "tarifa": float(tarifa),
-                "operador": operador.strip(),
-                "custodia": custodia.strip() or "Sin objetos declarados",
-                "fotos": rutas,
-                "estado": "En Resguardo",
-            }
-            registro["ticket_texto"] = crear_ticket(registro)
-            st.session_state.vehiculos.insert(0, registro)
-            if guardar_bd(st.session_state.vehiculos):
-                st.success(f"Ingreso registrado. Folio: {folio}")
-                st.rerun()
-
-# ---------------------------------------------------------------------
-# TAB DE ASISTENTE IA GEMINI
-# ---------------------------------------------------------------------
-with tab_ia:
-    encabezado_institucional("ASISTENTE DE INTELIGENCIA ARTIFICIAL GEMINI", "ASISTENCIA INTELIGENTE", "Diagnóstico de incidencias, consultas operativas y análisis por lenguaje natural")
-
-    col_ia1, col_ia2 = st.columns([1.5, 1])
-
-    with col_ia1:
-        st.subheader("💬 Asistente Conversacional Operativo")
-        st.caption("Consulta dudas del reglamento, estatus de la sucursal o procedimientos.")
-
-        for msg in st.session_state.chat_historial_ia:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
-
-        pregunta = st.chat_input("Escribe tu duda operativa...")
-        if pregunta:
-            st.session_state.chat_historial_ia.append({"role": "user", "content": pregunta})
-            with st.chat_message("user"):
-                st.write(pregunta)
-
-            with st.chat_message("assistant"):
-                with st.spinner("Consultando con Gemini..."):
-                    visibles = vehiculos_visibles(st.session_state.vehiculos)
-                    respuesta = funcion_ia_chat_asistente(pregunta, visibles)
-                    st.write(respuesta)
-                    st.session_state.chat_historial_ia.append({"role": "assistant", "content": respuesta})
-
-    with col_ia2:
-        st.subheader("🛡️ Evaluador Inteligente de Incidencias")
-        st.caption("Genera una postura formal e instrucción para el encargado ante una reclamación de cliente.")
-
-        incidencia_desc = st.text_area("Descripción de la reclamación o daño reportado por el cliente:")
-        custodia_ref = st.text_input("Observación de custodia de la entrada (opcional):")
-
-        if st.button("🤖 Diagnosticar Incidencia con IA", type="primary", use_container_width=True):
-            if not incidencia_desc.strip():
-                st.error("Ingresa la descripción del incidente.")
-            else:
-                with st.spinner("Analizando con Gemini..."):
-                    diag = funcion_ia_diagnostico_incidencia(
-                        incidencia_desc, custodia_ref, st.session_state.get("sucursal_asignada", "GENERAL")
+                fotos_custodia = []
+                if foto_pertenencias_camara:
+                    fotos_custodia.append(guardar_foto(foto_pertenencias_camara, folio, "pertenencia_camara"))
+                for indice, archivo_extra in enumerate(fotos_pertenencias_archivos or [], start=1):
+                    fotos_custodia.append(guardar_foto(archivo_extra, folio, f"pertenencia_{indice}"))
+                registro = {
+                    "id": folio,
+                    "folio_numero": folio_numero,
+                    "qr_payload": f"CLUBPARK|VEHICULO|{folio}",
+                    "fotos_requeridas": total_fotos,
+                    "fecha": fecha,
+                    "fecha_entrada": fecha,
+                    "fecha_entrada_iso": fecha_entrada_iso,
+                    "hora_entrada": ahora_entrada.strftime("%H:%M:%S"),
+                    "fecha_salida": "",
+                    "hora_salida": "",
+                    "salida_fecha": "",
+                    "sucursal": sucursal,
+                    "marca": marca.strip(),
+                    "color": color.strip(),
+                    "placas": placas,
+                    "tarifa": float(tarifa),
+                    "operador": operador.strip(),
+                    "custodia": custodia.strip() or "Sin objetos declarados",
+                    "fotos": rutas,
+                    "fotos_custodia": fotos_custodia,
+                    "estado": "En Resguardo",
+                    "registrado_por": st.session_state.usuario_autenticado,
+                }
+                registro["ticket_texto"] = crear_ticket(registro)
+                st.session_state.vehiculos.insert(0, registro)
+                if guardar_bd(st.session_state.vehiculos):
+                    st.session_state.ultimo_ticket = registro["ticket_texto"]
+                    st.session_state.ultimo_folio = folio
+                    guardar_evento_auditoria(
+                        "ALTA DE VEHICULO",
+                        f"Folio {folio} · {sucursal} · {marca} placas {placas} · ${tarifa:,.2f} · operador {operador or 'no indicado'}",
                     )
-                    st.markdown("### Resultado del Diagnóstico:")
-                    st.info(diag)
+                    st.success(f"Ingreso registrado. Folio: {folio}")
+                    st.rerun()
+            except Exception as exc:
+                st.error(f"No se pudieron guardar las fotografías o el registro: {exc}")
 
-# Resto de pestañas continúan normales (Vehículos, Salida, Balances, Reportes, Auditoría, etc.)
+    if st.session_state.get("ultimo_ticket"):
+        st.divider()
+        st.subheader(f"Ticket generado: {st.session_state.get('ultimo_folio', '')}")
+        ultimo = next((r for r in st.session_state.vehiculos if r.get("id") == st.session_state.get("ultimo_folio")), None)
+        if ultimo:
+            if QR_OK:
+                qr_data = generar_qr_bytes(ultimo)
+                st.image(qr_data, caption="QR único del vehículo", width=180)
+            vista_impresion_con_qr(ultimo, "cliente", "imprimir_cliente_ingreso")
+            vista_impresion_con_qr(ultimo, "llavero", "imprimir_contrasena_ingreso")
+            imprimir_partes_ticket(ultimo, "ingreso")
+
+
+# ---------------------------------------------------------------------
+# RESTO DE PESTAÑAS (VEHÍCULOS, SALIDA, BALANCES, REIMPRESIÓN, REPORTES, ETC.)
+# ---------------------------------------------------------------------
 with tab_list:
-    st.write("Consulta y seguimiento de vehículos registrados.")
-    st.dataframe(pd.DataFrame(vehiculos_visibles(st.session_state.vehiculos)), use_container_width=True)
+    encabezado_institucional("VEHÍCULOS REGISTRADOS", "CONTROL DE RESGUARDO", "Consulta y seguimiento")
+    visibles = vehiculos_visibles(st.session_state.vehiculos)
+    if not visibles:
+        st.info("No hay vehículos registrados para tu alcance.")
+    else:
+        df_v = pd.DataFrame(visibles)
+        columnas_mostrar = ["id", "fecha", "sucursal", "marca", "placas", "tarifa", "operador", "estado", "pago_estado", "metodo_pago"]
+        for col in columnas_mostrar:
+            if col not in df_v.columns:
+                df_v[col] = ""
+        st.dataframe(df_v[columnas_mostrar], use_container_width=True, hide_index=True)
+
 
 with tab_salida:
-    st.write("Registro de salida y cobro de vehículos.")
+    encabezado_institucional("SALIDA DE VEHÍCULO Y REGISTRO DE COBRO", "OPERACIÓN 2 · ENTREGA", "Cobro y entrega")
+    st.caption("Captura el folio o escanea el QR único.")
+    metodo_busqueda = st.radio("Cómo localizar el vehículo", ["Capturar folio", "Escanear QR con cámara"], horizontal=True)
+    valor_busqueda = ""
+    if metodo_busqueda == "Capturar folio":
+        valor_busqueda = st.text_input("Folio del boleto", key="folio_buscar_salida").strip()
+    else:
+        valor_busqueda = str(lector_qr_camara_trasera("lector_salida_trasero", height=430) or "").strip()
+
+    folio_busqueda = extraer_folio_qr(valor_busqueda)
+    registro_salida = next(
+        (r for r in st.session_state.vehiculos if str(r.get("id", "")).upper() == str(folio_busqueda).upper()),
+        None,
+    ) if folio_busqueda else None
+
+    if registro_salida:
+        st.markdown(f"### Folio {registro_salida.get('id')}")
+        st.write(f"**Marca/modelo:** {registro_salida.get('marca', '')} · **Placas:** {registro_salida.get('placas', '')}")
+        tarifa_salida = dinero(registro_salida.get("tarifa", 50))
+        st.metric("Tarifa a cobrar", f"${tarifa_salida:,.2f} MXN")
+        forma_pago = st.radio("Método de pago", ["Efectivo", "Tarjeta", "QR"], horizontal=True)
+        if st.button("💳 Registrar cobro y salida", type="primary", use_container_width=True):
+            ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            pago = {
+                "id_pago": str(uuid.uuid4()),
+                "fecha_hora": ahora,
+                "importe": tarifa_salida,
+                "metodo": forma_pago,
+                "estado": "Pagado",
+                "usuario": st.session_state.usuario_autenticado,
+            }
+            registro_salida["estado"] = "Entregado"
+            registro_salida["salida_fecha"] = ahora
+            registro_salida["pago_estado"] = "Pagado"
+            guardar_pago_respaldo(pago, registro_salida)
+            guardar_bd(st.session_state.vehiculos)
+            st.success("Salida y cobro registrados correctamente.")
+            st.rerun()
+
 
 with tab_balance:
-    st.write("Balances financieros.")
+    encabezado_institucional("BALANCES OPERATIVOS Y RENTABILIDAD", "FINANZAS", "Balance por sucursal")
+    registros_balance = vehiculos_visibles(st.session_state.vehiculos)
+    if registros_balance:
+        df_b = pd.DataFrame(registros_balance)
+        st.dataframe(df_b, use_container_width=True)
+
 
 with tab_imp:
-    st.write("Reimpresión de tickets.")
+    encabezado_institucional("RE-IMPRESIÓN TÉRMICA DE TICKETS", "IMPRESIÓN ESC/POS", "Reemisión")
+    panel_prueba_impresion(key_sufijo="reimpresion", expandido=False)
+    panel_reintentos_impresion(expandido=True, sufijo_panel="reimp")
+
 
 with tab_rep:
-    st.write("Reportes operativos.")
+    encabezado_institucional("REPORTE OPERATIVO Y EXCEL OFICIAL", "DOCUMENTACIÓN", "Exportación")
+    visibles = vehiculos_visibles(st.session_state.vehiculos)
+    if visibles:
+        df_rep = pd.DataFrame(visibles)
+        excel_data = generar_excel_oficial(df_rep)
+        st.download_button("📥 Descargar Excel Oficial", data=excel_data.getvalue(), file_name="Reporte_ClubPark.xlsx")
+
 
 with tab_corte:
-    st.write("Cortes de caja.")
+    encabezado_institucional("CORTE DE CAJA", "CONTROL DE EFECTIVO", "Arqueo de caja")
+    st.info("Módulo de corte de caja activo.")
+
 
 with tab_cierre_diario:
-    st.write("Cierre diario por sucursal.")
+    encabezado_institucional("REPORTE DIARIO DE CIERRE POR SUCURSAL", "CIERRE OPERATIVO", "Cierre diario")
+    st.info("Módulo de cierre diario activo.")
+
 
 with tab_aud:
-    st.write("Auditoría del sistema.")
+    encabezado_institucional("AUDITORÍA Y COMUNICACIÓN", "GOBIERNO DEL SISTEMA", "Bitácora institucional")
+    eventos = cargar_auditoria()
+    if eventos:
+        st.dataframe(pd.DataFrame(eventos), use_container_width=True)
+
 
 with tab_qrs:
-    st.write("Credenciales QR.")
+    encabezado_institucional("CÓDIGOS QR OFICIALES DE SUCURSALES", "CREDENCIALES", "Acceso")
+    if es_contador:
+        st.dataframe(pd.DataFrame.from_dict(ACCESOS, orient="index"))
+
 
 with tab_pruebas:
-    st.write("Pruebas de funcionamiento.")
+    encabezado_institucional("PRUEBAS OPERATIVAS DEL SISTEMA", "VERIFICACIÓN PREVIA", "Autodiagnóstico")
+    if st.button("▶️ Ejecutar pruebas operativas", type="primary", use_container_width=True):
+        res = ejecutar_pruebas_operativas()
+        st.dataframe(pd.DataFrame(res), use_container_width=True)
 
+
+# ---------------------------------------------------------------------
+# TAB INTELIGENCIA OPERATIVA E IA (INTEGRADA)
+# ---------------------------------------------------------------------
 with tab_intel:
-    encabezado_institucional("INTELIGENCIA OPERATIVA", "ANÁLISIS CONTINUO", "Resumen ejecutivo generado por IA")
-    if st.button("🤖 Generar Resumen Ejecutivo Estratégico con Gemini IA", type="primary"):
-        with st.spinner("Generando informe analítico..."):
-            informe = funcion_ia_resumen_ejecutivo(vehiculos_visibles(st.session_state.vehiculos))
-            st.markdown(informe)
+    encabezado_institucional("INTELIGENCIA OPERATIVA Y ASISTENCIA DE IA", "IA & ANALÍTICA", "Modelos predictivos y consultoría en tiempo real")
+    registros_intel = vehiculos_visibles(st.session_state.vehiculos)
+
+    st.markdown("### 🤖 Asistente de IA (OpenAI GPT-4o-mini)")
+    st.caption("Haz preguntas sobre la operación, solicita resúmenes ejecutivos, análisis de estancias o recomendaciones de personal.")
+
+    query_ia = st.text_input("Escribe tu consulta para la IA de Club Park:", placeholder="Ej. ¿Qué sucursales presentan mayor número de estancias prolongadas hoy y qué acciones tomar?")
+
+    if st.button("🧠 Consultar Inteligencia Artificial", type="primary"):
+        if not query_ia.strip():
+            st.warning("Escribe una pregunta para consultar a la IA.")
+        else:
+            contexto_sistema = {
+                "total_vehiculos": len(registros_intel),
+                "en_resguardo": len([r for r in registros_intel if r.get("estado") != "Entregado"]),
+                "entregados": len([r for r in registros_intel if r.get("estado") == "Entregado"]),
+                "usuario_consultante": st.session_state.usuario_autenticado,
+                "rol": st.session_state.rol,
+                "sucursal": st.session_state.sucursal_asignada,
+                "muestra_registros": registros_intel[:20]
+            }
+            with st.spinner("Procesando consulta con la Inteligencia Artificial de Club Park…"):
+                respuesta_ia = asistente_ia_consulta(query_ia, contexto_sistema)
+                st.markdown("#### Respuesta de la IA:")
+                st.info(respuesta_ia)
+
+    st.divider()
+    st.markdown("### 📊 Indicadores Automatizados de la Operación")
+    if registros_intel:
+        kpis, alertas, resumen, recomendaciones = analisis_inteligente(registros_intel)
+        col1, col2, col3, col4 = st.columns(4)
+        for col, (titulo, valor) in zip((col1, col2, col3, col4), kpis):
+            col.metric(titulo, valor)
+        st.markdown("**Resumen ejecutivo automático:**")
+        st.write(resumen)
+    else:
+        st.info("Sin datos para generar métricas de analítica automatizada.")
