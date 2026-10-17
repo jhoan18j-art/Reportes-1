@@ -1419,7 +1419,7 @@ def leer_codigo_qr(imagen_pil):
                     valor, _, _ = detector.detectAndDecode(prueba)
                     if valor and valor.strip():
                         return valor.strip()
-                except 
+                except: 
        Exception:
         pass
     return None
