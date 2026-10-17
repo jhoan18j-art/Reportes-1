@@ -3664,11 +3664,11 @@ with tab_intel:
         detalle_etapas = " · ".join(
             f"{ETAPAS_IMPRESION.get(k, k)}: {v}" for k, v in por_etapa.items()
         )
+            if fallos_imp:
         st.warning("Fallos de impresión detectados → " + detalle_etapas)
         st.dataframe(pd.DataFrame(fallos_imp[:10]), use_container_width=True, hide_index=True)
     elif eventos_imp:
         st.success("La impresión térmica opera sin fallos registrados.")
     else:
         st.caption("Aún no hay eventos de impresión: ejecuta la prueba de impresión en 🧪 Pruebas Operativas o en 🖨️ Re-Impresión Térmica.")
- 
-    ]
+        
