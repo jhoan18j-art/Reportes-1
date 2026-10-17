@@ -3660,7 +3660,7 @@ with tab_intel:
                 por_etapa = {}
                 por_etapa = {}
                 por_etapa = {}
-                        por_etapa = {}
+                por_etapa = {}
         for e in fallos_imp:
             clave = e.get("etapa", "OTRO")
             por_etapa[clave] = por_etapa.get(clave, 0) + 1
