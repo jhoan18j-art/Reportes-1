@@ -1801,4 +1801,466 @@ with tab_list:
 # ---------------------------------------------------------------------
 with tab_salida:
     st.subheader("Salida de vehículo y registro de cobro")
-    st.caption("Escanea el QR único del boleto
+    st.caption("Escanea el QR único del boleto o captura el folio. La salida solo se registra una vez.")
+    metodo_busqueda = st.radio(
+        "Cómo localizar el vehículo",
+        ["Capturar folio", "Escanear QR con cámara", "Subir imagen QR"],
+        horizontal=True,
+        key="metodo_busqueda_salida",
+    )
+    valor_busqueda = ""
+    if metodo_busqueda == "Capturar folio":
+        valor_busqueda = st.text_input("Folio del boleto", key="folio_buscar_salida").strip()
+    elif metodo_busqueda == "Escanear QR con cámara":
+        valor_query = str(st.query_params.get("qrscan", "") or "").strip()
+        st.info("Se abrirá la cámara posterior. Mantén el QR dentro del recuadro; al detectarlo, el lector lo enviará directamente al formulario.")
+        nonce_lector = int(st.session_state.get("qr_scan_nonce_salida", 0))
+        valor_leido = lector_qr_camara_trasera(f"lector_salida_trasero_{nonce_lector}", height=430)
+        valor_busqueda = str(valor_leido or valor_query or "").strip()
+        if valor_busqueda:
+            st.success(f"QR leído: {valor_busqueda}")
+            if st.button("🧹 Limpiar QR leído", key="limpiar_qr_salida"):
+                st.session_state.qr_scan_nonce_salida = int(st.session_state.get("qr_scan_nonce_salida", 0)) + 1
+                st.query_params.clear()
+                st.rerun()
+    else:
+        archivo_qr_salida = st.file_uploader("Sube la imagen QR del ticket", type=["png", "jpg", "jpeg"], key="archivo_qr_salida")
+        if archivo_qr_salida:
+            valor_busqueda = leer_codigo_qr(Image.open(archivo_qr_salida)) or ""
+
+    folio_busqueda = extraer_folio_qr(valor_busqueda)
+    registro_salida = next(
+        (r for r in st.session_state.vehiculos if str(r.get("id", "")).upper() == str(folio_busqueda).upper()),
+        None,
+    ) if folio_busqueda else None
+
+    if folio_busqueda and not registro_salida:
+        st.error("No se encontró un vehículo con ese folio/QR.")
+    if registro_salida and not usuario_es_global() and registro_salida.get("sucursal") != st.session_state.sucursal_asignada:
+        st.error("Este vehículo pertenece a otra sucursal. No tienes permiso para cobrarlo ni entregarlo.")
+        registro_salida = None
+
+    if registro_salida:
+        st.divider()
+        a, b = st.columns([2, 1])
+        with a:
+            st.markdown(f"### Folio {registro_salida.get('id')}")
+            st.write(f"**Sucursal:** {registro_salida.get('sucursal')}")
+            st.write(f"**Marca/modelo:** {registro_salida.get('marca', '')}")
+            st.write(f"**Placas:** {registro_salida.get('placas', '')} · **Color:** {registro_salida.get('color', '')}")
+            st.write(f"**Fecha/hora de entrada:** {registro_salida.get('fecha_entrada', registro_salida.get('fecha', ''))}")
+            st.write(f"**Fecha/hora de salida:** {registro_salida.get('salida_fecha', 'Pendiente de salida') or 'Pendiente de salida'}")
+            st.write(f"**Estado:** {registro_salida.get('estado', 'En Resguardo')}")
+        with b:
+            if QR_OK:
+                st.image(generar_qr_bytes(registro_salida), caption="QR del vehículo", width=150)
+        if registro_salida.get("estado") == "Entregado":
+            st.success(f"Este vehículo ya fue entregado el {registro_salida.get('salida_fecha', 'fecha no disponible')}.")
+            st.info("Para evitar cobros duplicados, no se permite registrar otra salida.")
+        elif registro_salida.get("estado") != "En Resguardo":
+            st.warning("El vehículo no está en estado 'En Resguardo'. Revisa el registro antes de continuar.")
+        else:
+            tarifa_salida = dinero(registro_salida.get("tarifa", PRECIOS_SUCURSALES.get(registro_salida.get("sucursal"), 0)))
+            st.metric("Tarifa fija a cobrar", f"${tarifa_salida:,.2f} MXN")
+            st.caption("La tarifa se toma del registro de ingreso. Verifica cualquier cambio autorizado antes de cobrar.")
+            forma_pago = st.radio("Método de pago", ["Efectivo", "Tarjeta", "QR"], horizontal=True, key=f"pago_metodo_{registro_salida['id']}")
+            referencia_pago = st.text_input("Referencia / autorización (si aplica)", key=f"pago_ref_{registro_salida['id']}")
+            nota_pago = st.text_input("Observaciones del cobro", key=f"pago_nota_{registro_salida['id']}")
+            if forma_pago == "Efectivo":
+                st.info("El efectivo se registrará como recibido al confirmar la entrega.")
+            elif forma_pago == "Tarjeta":
+                st.warning("Registra el pago con la terminal bancaria. Esta versión guarda el comprobante y la referencia capturada, pero no consulta automáticamente al banco.")
+            else:
+                st.warning("Cobra con la app/proveedor QR. Esta versión guarda la referencia y la confirmación del operador; no valida automáticamente la aprobación del proveedor.")
+            referencia_obligatoria = forma_pago != "Efectivo"
+            pago_aprobado_externamente = False
+            if referencia_obligatoria:
+                pago_aprobado_externamente = st.checkbox(
+                    f"Confirmo que revisé la aprobación en la terminal/app de {forma_pago} y que el importe es correcto.",
+                    key=f"pago_externo_aprobado_{registro_salida['id']}",
+                )
+            confirmar_pago = st.checkbox(
+                "Confirmo que verifiqué el importe y que el vehículo puede ser entregado.",
+                key=f"confirmar_salida_{registro_salida['id']}",
+            )
+            if st.button("💳 Registrar cobro y salida", type="primary", use_container_width=True, disabled=not confirmar_pago, key=f"btn_salida_{registro_salida['id']}"):
+                if referencia_obligatoria and not referencia_pago.strip():
+                    st.error("Captura la referencia de autorización del proveedor.")
+                elif referencia_obligatoria and not pago_aprobado_externamente:
+                    st.error("No se registró la salida: confirma primero que el proveedor aprobó el pago.")
+                else:
+                    momento_operacion = datetime.now()
+                    ahora = momento_operacion.strftime("%Y-%m-%d %H:%M:%S")
+                    pago = {
+                        "id_pago": str(uuid.uuid4()),
+                        "fecha_hora": ahora,
+                        "fecha_hora_iso": momento_operacion.isoformat(timespec="seconds"),
+                        "sucursal": registro_salida.get("sucursal"),
+                        "folio": registro_salida.get("id"),
+                        "importe": tarifa_salida,
+                        "metodo": forma_pago,
+                        "estado": "Pagado",
+                        "referencia": referencia_pago.strip(),
+                        "observaciones": nota_pago.strip(),
+                        "usuario": st.session_state.usuario_autenticado,
+                        "confirmacion_manual": forma_pago != "Efectivo",
+                    }
+                    registro_salida.setdefault("pagos", []).append(pago)
+                    registro_salida["pago_estado"] = "Pagado"
+                    registro_salida["metodo_pago"] = forma_pago
+                    registro_salida["importe_cobrado"] = tarifa_salida
+                    registro_salida["salida_fecha"] = ahora
+                    registro_salida["fecha_salida"] = momento_operacion.strftime("%d/%m/%Y")
+                    registro_salida["hora_salida"] = momento_operacion.strftime("%H:%M:%S")
+                    registro_salida["salida_fecha_hora_iso"] = momento_operacion.isoformat(timespec="seconds")
+                    registro_salida["entregado_por"] = st.session_state.usuario_autenticado
+                    registro_salida["estado"] = "Entregado"
+                    # Actualiza el ticket para que las reimpresiones posteriores reflejen la salida real.
+                    registro_salida["ticket_texto"] = crear_ticket(registro_salida)
+                    respaldo_ok = guardar_pago_respaldo(pago, registro_salida)
+                    if respaldo_ok and guardar_bd(st.session_state.vehiculos):
+                        st.session_state.ultimo_comprobante_cobro = {
+                            "pago": pago.copy(),
+                            "registro": {
+                                "id": registro_salida.get("id", ""),
+                                "sucursal": registro_salida.get("sucursal", ""),
+                                "marca": registro_salida.get("marca", ""),
+                                "placas": registro_salida.get("placas", ""),
+                            },
+                        }
+                        guardar_evento_auditoria("SALIDA Y COBRO", f"Folio {registro_salida.get('id')} · ${tarifa_salida:.2f} · {forma_pago} · {registro_salida.get('sucursal')}")
+                        st.success(f"Salida registrada. Folio {registro_salida.get('id')}; cobro de ${tarifa_salida:,.2f} MXN por {forma_pago}.")
+                        st.rerun()
+
+
+    comprobante_reciente = st.session_state.get("ultimo_comprobante_cobro")
+    if comprobante_reciente:
+        st.divider()
+        st.subheader("🧾 Último comprobante de cobro")
+        st.caption("El comprobante se genera después del cobro y la salida. Los cobros también se guardan en un libro independiente de pagos para respaldo. En tarjeta y QR, la aprobación se confirma manualmente en la terminal/app.")
+        vista_comprobante_cobro(
+            comprobante_reciente.get("pago", {}),
+            comprobante_reciente.get("registro", {}),
+            "imprimir_comprobante_cobro_reciente",
+        )
+        pago_reciente = comprobante_reciente.get("pago", {})
+        registro_reciente = comprobante_reciente.get("registro", {})
+        texto_comprobante = "\n".join([
+            "CLUB PARK",
+            "VALET Y ESTACIONAMIENTOS S.A. DE C.V.",
+            "COMPROBANTE DE COBRO",
+            "--------------------------------",
+            f"Sucursal: {registro_reciente.get('sucursal', '')}",
+            f"Folio: {registro_reciente.get('id', '')}",
+            f"Vehiculo: {registro_reciente.get('marca', '')} {registro_reciente.get('placas', '')}",
+            f"Fecha: {pago_reciente.get('fecha_hora', '')}",
+            f"Importe: ${dinero(pago_reciente.get('importe')):,.2f} MXN",
+            f"Metodo: {pago_reciente.get('metodo', '')}",
+            f"Estado: {pago_reciente.get('estado', '')}",
+            f"Referencia: {pago_reciente.get('referencia', '') or 'No aplica'}",
+            f"Atendio: {pago_reciente.get('usuario', '')}",
+            "--------------------------------",
+            "Conserve este comprobante.",
+            "Gracias por su preferencia.",
+        ])
+        st.markdown("**Impresión térmica Bluetooth del comprobante**")
+        imprimir_bluetooth(texto_comprobante, f"comprobante_{registro_reciente.get('id', 'reciente')}")
+        st.download_button(
+            "⬇️ Descargar comprobante en texto",
+            data="CLUB PARK\nCOMPROBANTE DE COBRO\n" + "\n".join(
+                f"{k}: {v}" for k, v in {
+                    "Sucursal": comprobante_reciente.get("registro", {}).get("sucursal", ""),
+                    "Folio": comprobante_reciente.get("registro", {}).get("id", ""),
+                    "Fecha y hora": comprobante_reciente.get("pago", {}).get("fecha_hora", ""),
+                    "Importe": f"${dinero(comprobante_reciente.get('pago', {}).get('importe')):,.2f} MXN",
+                    "Método": comprobante_reciente.get("pago", {}).get("metodo", ""),
+                    "Estado": comprobante_reciente.get("pago", {}).get("estado", ""),
+                    "Referencia": comprobante_reciente.get("pago", {}).get("referencia", "") or "No aplica",
+                }.items()
+            ),
+            file_name=f"Comprobante_{comprobante_reciente.get('registro', {}).get('id', 'CLUBPARK')}.txt",
+            mime="text/plain",
+            key="descargar_comprobante_cobro_reciente",
+        )
+
+
+# ---------------------------------------------------------------------
+# TAB: BALANCES Y RENTABILIDAD POR SUCURSAL
+# ---------------------------------------------------------------------
+with tab_balance:
+    st.subheader("Balances operativos y rentabilidad por sucursal")
+    st.caption(
+        "El conteo de vehículos y los ingresos se calculan desde los registros. "
+        "La rentabilidad usa los gastos operativos capturados por el supervisor o auditor."
+    )
+
+    COSTOS_FILE = DATA_DIR / "gastos_operativos.json"
+
+    def cargar_gastos_operativos():
+        if not COSTOS_FILE.exists():
+            return []
+        try:
+            datos = json.loads(COSTOS_FILE.read_text(encoding="utf-8"))
+            return datos if isinstance(datos, list) else []
+        except (OSError, json.JSONDecodeError):
+            return []
+
+    def guardar_gastos_operativos(datos):
+        temporal = COSTOS_FILE.with_suffix(".tmp")
+        temporal.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temporal, COSTOS_FILE)
+
+    if not (es_contador or "Supervisor" in str(st.session_state.get("rol", ""))):
+        st.error("No tienes permisos para consultar balances de rentabilidad.")
+    else:
+        sucursales_balance = SUCURSALES if es_global else [st.session_state.sucursal_asignada]
+        colf1, colf2 = st.columns(2)
+        with colf1:
+            fecha_desde = st.date_input("Desde", value=datetime.now().date(), key="balance_desde")
+        with colf2:
+            fecha_hasta = st.date_input("Hasta", value=datetime.now().date(), key="balance_hasta")
+
+        if fecha_desde > fecha_hasta:
+            st.error("La fecha inicial no puede ser posterior a la fecha final.")
+        else:
+            registros_balance = vehiculos_visibles(st.session_state.vehiculos)
+
+            def fecha_registro(registro):
+                for campo in ("salida_fecha", "fecha"):
+                    valor = registro.get(campo, "")
+                    for formato in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y"):
+                        try:
+                            return datetime.strptime(valor, formato).date()
+                        except (ValueError, TypeError):
+                            continue
+                return None
+
+            registros_periodo = []
+            for registro in registros_balance:
+                f_ingreso = fecha_registro(registro)
+                try:
+                    f_ingreso = datetime.strptime(registro.get("fecha", ""), "%d/%m/%Y %H:%M:%S").date()
+                except (ValueError, TypeError):
+                    try:
+                        f_ingreso = datetime.strptime(registro.get("fecha", ""), "%Y-%m-%d %H:%M:%S").date()
+                    except (ValueError, TypeError):
+                        f_ingreso = None
+                if f_ingreso and fecha_desde <= f_ingreso <= fecha_hasta:
+                    registros_periodo.append(registro)
+
+            gastos = cargar_gastos_operativos()
+            gastos_periodo = []
+            for gasto in gastos:
+                if not es_global and gasto.get("sucursal") != st.session_state.sucursal_asignada:
+                    continue
+                try:
+                    f_gasto = datetime.strptime(gasto.get("fecha", ""), "%Y-%m-%d").date()
+                except (ValueError, TypeError):
+                    continue
+                if fecha_desde <= f_gasto <= fecha_hasta:
+                    gastos_periodo.append(gasto)
+
+            filas = []
+            for suc in sucursales_balance:
+                todos_suc = [r for r in registros_balance if r.get("sucursal") == suc]
+                entradas = 0
+                salidas_periodo = []
+                ingresos = 0.0
+                folios_cobrados = set()
+
+                for reg in todos_suc:
+                    try:
+                        ingreso_dt = datetime.strptime(reg.get("fecha", ""), "%d/%m/%Y %H:%M:%S").date()
+                    except (ValueError, TypeError):
+                        try:
+                            ingreso_dt = datetime.strptime(reg.get("fecha", ""), "%Y-%m-%d %H:%M:%S").date()
+                        except (ValueError, TypeError):
+                            ingreso_dt = None
+                    if ingreso_dt and fecha_desde <= ingreso_dt <= fecha_hasta:
+                        entradas += 1
+
+                    salida_dt = None
+                    try:
+                        salida_dt = datetime.strptime(reg.get("salida_fecha", ""), "%Y-%m-%d %H:%M:%S").date()
+                    except (ValueError, TypeError):
+                        pass
+                    if reg.get("estado") == "Entregado" and salida_dt and fecha_desde <= salida_dt <= fecha_hasta:
+                        salidas_periodo.append(reg)
+                        pagos = [p for p in reg.get("pagos", []) if p.get("estado") == "Pagado"]
+                        if pagos:
+                            for pago in pagos:
+                                pago_dt = None
+                                try:
+                                    pago_dt = datetime.strptime(pago.get("fecha_hora", ""), "%Y-%m-%d %H:%M:%S").date()
+                                except (ValueError, TypeError):
+                                    pass
+                                if pago_dt is None or fecha_desde <= pago_dt <= fecha_hasta:
+                                    ingresos += dinero(pago.get("importe", 0))
+                                    folios_cobrados.add(reg.get("id"))
+                        elif reg.get("pago_estado") == "Pagado":
+                            ingresos += dinero(reg.get("importe_cobrado", reg.get("tarifa", 0)))
+                            folios_cobrados.add(reg.get("id"))
+
+                gastos_suc = sum(dinero(g.get("importe", 0)) for g in gastos_periodo if g.get("sucursal") == suc)
+                utilidad = ingresos - gastos_suc
+                margen = (utilidad / ingresos * 100) if ingresos > 0 else 0.0
+                filas.append({
+                    "Sucursal": suc,
+                    "Vehículos ingresados": entradas,
+                    "Vehículos que salieron": len(salidas_periodo),
+                    "Vehículos cobrados": len(folios_cobrados),
+                    "Pendientes de cobro": max(0, len(salidas_periodo) - len(folios_cobrados)),
+                    "Ingresos ($)": ingresos,
+                    "Gastos operativos ($)": gastos_suc,
+                    "Utilidad estimada ($)": utilidad,
+                    "Margen (%)": margen,
+                })
+
+            df_balance = pd.DataFrame(filas)
+            if not es_global:
+                suc_sel = st.session_state.sucursal_asignada
+                df_balance = df_balance[df_balance["Sucursal"] == suc_sel]
+
+            total_ingresos = float(df_balance["Ingresos ($)"].sum()) if not df_balance.empty else 0
+            total_gastos = float(df_balance["Gastos operativos ($)"].sum()) if not df_balance.empty else 0
+            total_utilidad = total_ingresos - total_gastos
+            vehiculos_ingresados = int(df_balance["Vehículos ingresados"].sum()) if not df_balance.empty else 0
+            vehiculos_salieron = int(df_balance["Vehículos que salieron"].sum()) if not df_balance.empty else 0
+            vehiculos_cobrados = int(df_balance["Vehículos cobrados"].sum()) if not df_balance.empty else 0
+            margen_total = total_utilidad / total_ingresos * 100 if total_ingresos else 0
+
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("Vehículos ingresados", vehiculos_ingresados)
+            k2.metric("Vehículos que salieron", vehiculos_salieron)
+            k3.metric("Vehículos cobrados", vehiculos_cobrados)
+            k4.metric("Pendientes de cobro", max(0, vehiculos_salieron - vehiculos_cobrados))
+            k5, k6, k7 = st.columns(3)
+            k5.metric("Ingresos confirmados", f"${total_ingresos:,.2f} MXN")
+            k6.metric("Gastos operativos", f"${total_gastos:,.2f} MXN")
+            k7.metric("Utilidad estimada", f"${total_utilidad:,.2f} MXN", delta=f"{margen_total:.1f}% margen")
+
+            st.markdown("#### Balance por sucursal")
+            st.dataframe(
+                df_balance.style.format({
+                    "Ingresos ($)": "${:,.2f}",
+                    "Gastos operativos ($)": "${:,.2f}",
+                    "Utilidad estimada ($)": "${:,.2f}",
+                    "Margen (%)": "{:.1f}%",
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            if es_contador or "Supervisor" in str(st.session_state.get("rol", "")):
+                st.markdown("#### Registrar gasto operativo")
+                st.caption("El Contador Auditor puede registrar gastos de cualquier sucursal; cada supervisor solo puede registrar gastos de su propia sucursal.")
+                with st.form("form_gasto_operativo", clear_on_submit=True):
+                    opciones_gasto = SUCURSALES if es_contador else [st.session_state.sucursal_asignada]
+                    suc_gasto = st.selectbox("Sucursal del gasto", opciones_gasto, key="gasto_sucursal")
+                    fecha_gasto = st.date_input("Fecha del gasto", value=datetime.now().date(), key="gasto_fecha")
+                    categoria_gasto = st.selectbox(
+                        "Categoría",
+                        ["Nómina", "Renta", "Insumos", "Mantenimiento", "Comisiones", "Servicios", "Otros"],
+                        key="gasto_categoria",
+                    )
+                    concepto_gasto = st.text_input("Concepto / descripción", key="gasto_concepto")
+                    importe_gasto = st.number_input("Importe ($)", min_value=0.01, value=1.0, step=50.0, key="gasto_importe")
+                    if st.form_submit_button("Guardar gasto"):
+                        if not concepto_gasto.strip():
+                            st.error("Escribe una descripción para el gasto.")
+                        else:
+                            nuevos_gastos = cargar_gastos_operativos()
+                            nuevo_gasto = {
+                                "id": uuid.uuid4().hex[:12].upper(),
+                                "fecha": str(fecha_gasto),
+                                "sucursal": suc_gasto,
+                                "categoria": categoria_gasto,
+                                "concepto": concepto_gasto.strip(),
+                                "importe": float(importe_gasto),
+                                "registrado_por": st.session_state.usuario_autenticado,
+                                "registrado_en": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            }
+                            nuevos_gastos.insert(0, nuevo_gasto)
+                            try:
+                                guardar_gastos_operativos(nuevos_gastos)
+                                guardar_evento_auditoria("GASTO OPERATIVO", f"{suc_gasto} · {categoria_gasto} · ${importe_gasto:.2f} · {concepto_gasto.strip()}")
+                                st.success("Gasto registrado y añadido al balance.")
+                                st.rerun()
+                            except OSError as exc:
+                                st.error(f"No se pudo guardar el gasto: {exc}")
+
+            st.markdown("#### Rentabilidad por sucursal")
+            st.caption("Margen = (ingresos confirmados − gastos registrados) ÷ ingresos confirmados. No incluye costos que todavía no se hayan capturado.")
+            if not df_balance.empty:
+                st.bar_chart(df_balance.set_index("Sucursal")[["Ingresos ($)", "Gastos operativos ($)", "Utilidad estimada ($)"]])
+                st.download_button(
+                    "⬇️ Descargar balance CSV",
+                    data=df_balance.to_csv(index=False).encode("utf-8-sig"),
+                    file_name=f"balance_clubpark_{fecha_desde}_{fecha_hasta}.csv",
+                    mime="text/csv",
+                    key="descargar_balance_csv",
+                )
+
+
+# ---------------------------------------------------------------------
+# TAB: CORTES DE CAJA
+# ---------------------------------------------------------------------
+with tab_corte:
+    st.subheader("Corte de caja")
+    st.caption("Los totales se calculan con salidas registradas y pagos confirmados. Pagos QR/tarjeta no confirmados no se suman a lo cobrado.")
+    registros_entregados = [
+        r for r in vehiculos_visibles(st.session_state.vehiculos)
+        if r.get("estado") == "Entregado" and r.get("salida_fecha")
+    ]
+    sucursales_corte = SUCURSALES if es_global else [st.session_state.sucursal_asignada]
+    suc_corte = st.selectbox("Sucursal", sucursales_corte, key="corte_sucursal")
+    fecha_corte = st.date_input("Fecha del corte", value=datetime.now().date(), key="fecha_corte")
+    inicio_corte = st.text_input("Hora inicial (HH:MM)", value="00:00", key="hora_inicio_corte")
+    fin_corte = st.text_input("Hora final (HH:MM)", value="23:59", key="hora_fin_corte")
+    try:
+        desde_dt = datetime.strptime(f"{fecha_corte:%Y-%m-%d} {inicio_corte}", "%Y-%m-%d %H:%M")
+        hasta_dt = datetime.strptime(f"{fecha_corte:%Y-%m-%d} {fin_corte}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        desde_dt = hasta_dt = None
+        st.error("Usa formato de hora HH:MM, por ejemplo 08:00.")
+    movimientos_corte = []
+    if desde_dt and hasta_dt and desde_dt <= hasta_dt:
+        for reg in registros_entregados:
+            if reg.get("sucursal") != suc_corte:
+                continue
+            try:
+                salida_dt = datetime.strptime(reg.get("salida_fecha", ""), "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                continue
+            if not (desde_dt <= salida_dt <= hasta_dt):
+                continue
+            for pago in reg.get("pagos", []):
+                if pago.get("estado") == "Pagado":
+                    movimientos_corte.append(pago)
+    elif desde_dt and hasta_dt:
+        st.error("La hora inicial no puede ser posterior a la hora final.")
+
+    efectivo_total = sum(dinero(p.get("importe")) for p in movimientos_corte if p.get("metodo") == "Efectivo")
+    qr_total = sum(dinero(p.get("importe")) for p in movimientos_corte if p.get("metodo") == "QR")
+    tarjeta_total = sum(dinero(p.get("importe")) for p in movimientos_corte if p.get("metodo") == "Tarjeta")
+    total_cobrado = efectivo_total + qr_total + tarjeta_total
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Efectivo", f"${efectivo_total:,.2f}")
+    m2.metric("QR confirmado", f"${qr_total:,.2f}")
+    m3.metric("Tarjeta confirmada", f"${tarjeta_total:,.2f}")
+    m4.metric("Total cobrado", f"${total_cobrado:,.2f}")
+    st.write(f"**Movimientos confirmados:** {len(movimientos_corte)}")
+    if movimientos_corte:
+        st.dataframe(pd.DataFrame(movimientos_corte), use_container_width=True, hide_index=True)
+    else:
+        st.info("No hay pagos confirmados en ese periodo.")
+
+    st.markdown("#### Arqueo de efectivo")
+    apertura = st.number_input("Fondo inicial de caja ($)", min_value=0.0, value=0.0, step=50.0, key="fondo_apertura")
+    efectivo_contado = st.number_input("Efectivo contado físicamente al cierre ($)", min_value=0.0, value=0.0, step=50.0, key="efectivo_contado")
+    efectivo_esperado = apertura + efectivo_total
+    diferencia = efectivo_contado - efectivo_esperado
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Efectivo esperado", f"${efectivo_esperado:,.2f}")
+    c2.metric("Efectivo contado", f"${efectivo_contado:,.2f}")
+    c3.metric("Difer
