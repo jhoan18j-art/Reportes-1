@@ -67,13 +67,13 @@ CSS_INSTITUCIONAL = """
 <style>
 /* Paleta Institucional Club Park: Verde Botella Oficial */
 :root {
-  --cpv-verde-botella: #0B3B24;
-  --cpv-verde-oscuro: #072617;
+  --cpv-verde-verde: #0B3B24;
+  --cpv-verde-verde: #072617;
   --cpv-verde-medio: #145A32;
   --cpv-verde-claro: #EBF3EE;
   --cpv-dorado-oficial: #5B8F6E;
   --cpv-dorado-brillante: #7FA98C;
-  --cpv-fondo-suave: #F4F7F5;
+  --cpv-fondo-verde: #F4F7F5;
   --cpv-texto-principal: #1A2B20;
 }
 
@@ -114,7 +114,7 @@ button[kind="secondary"]:hover, .stButton > button[kind="secondary"]:hover {
   color: #0B3B24 !important;
 }
 
-/* Pestañas (Tabs) en Verde Botella */
+/* Pestañas (Tabs) en Verde */
 button[data-baseweb="tab"] {
   color: #1A2B20 !important;
   font-weight: 600 !important;
