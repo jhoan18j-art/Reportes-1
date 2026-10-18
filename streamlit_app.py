@@ -2862,6 +2862,58 @@ with tab_cierre_diario:
     cierres_guardados = cargar_cierres_diarios()
     cierre_existente = next((c for c in cierres_guardados if c.get("fecha") == str(fecha_cierre) and c.get("sucursal") == sucursal_cierre), None)
     if cierre_existente:
+            # --- CÓDIGO DE INTEGRACIÓN CON APP DE AUDITORÍA ---
+        # Mapeamos los datos del cierre al formato exacto que usa app (4).py
+        nuevo_reporte_auditoria = {
+            "ID": f"REP_{cierre['id'][:8]}",
+            "Fecha": cierre["fecha"],
+            "Sitio / Unidad": cierre["sucursal"],
+            "Horario": f"{cierre.get('desde', '00:00')} a {cierre.get('hasta', '23:59')}",
+            "Costo Boleto": float(cierre["costo_unitario_boleto"]),
+            "Folio Inicial": int(cierre["folio_inicial"]),
+            "Folio Final": int(cierre["folio_final"]),
+            "Total Boletos": cierre["total_boletos"],
+            "Sin Cobro": 0,
+            "Cancelados": cierre["boletos_cancelados"],
+            "Perdidos": cierre["boletos_perdidos"],
+            "Boletos Cobrados": cierre["boletos_pagados"],
+            "Ingreso Bruto": cierre["ingresos_confirmados"],
+            "Gastos Especiales": cierre["gastos_generales_adicionales"],
+            "Gastos Generales / Nómina": cierre["gastos_operativos_registrados"],
+            "Total Gastos": cierre["gastos_totales"],
+            "Ingreso Neto": cierre["balance_neto"],
+            "Margen (%)": round((cierre["balance_neto"] / cierre["ingresos_confirmados"] * 100), 2) if cierre["ingresos_confirmados"] > 0 else 0.0,
+            "Rentabilidad": "🟢 Alta" if (cierre["balance_neto"] / (cierre["ingresos_confirmados"] or 1)) >= 0.4 else "🟠 Baja",
+            "Score Auditoría": 100, 
+            "Nivel Auditoría": "🟢 Conforme (Digital)",
+            "Fallas Auditoría": [],
+            "Elaboró": cierre["usuario"],
+            "Usuario": cierre["usuario"],
+            "Recibe": "Auditoría Digital Automatizada",
+            "Tipo": "Operación Regular",
+            "foto_path": None, # Es un reporte 100% digital, no requiere foto
+            "Timestamp": cierre["guardado_en"]
+        }
+
+        # Escribimos directamente en la base de datos de la App de Auditoría
+        ruta_db_app1 = DATA_DIR / "reportes_clubpark.json"
+        try:
+            if ruta_db_app1.exists():
+                with open(ruta_db_app1, "r", encoding="utf-8") as f:
+                    reportes_app1 = json.load(f)
+            else:
+                reportes_app1 = []
+            
+            reportes_app1.insert(0, nuevo_reporte_auditoria)
+            
+            with open(ruta_db_app1, "w", encoding="utf-8") as f:
+                json.dump(reportes_app1, f, ensure_ascii=False, indent=2)
+                
+            st.success("✅ Cierre enviado automáticamente al Panel de Auditoría y Rentabilidad.")
+        except Exception as e:
+            st.error(f"Error sincronizando con Auditoría: {e}")
+        # --- FIN DEL CÓDIGO DE INTEGRACIÓN ---
+        
         st.warning(f"Ya existe un cierre para {sucursal_cierre} el {fecha_cierre}. Marca la casilla para reemplazarlo con los datos actuales.")
     reemplazar_cierre = st.checkbox(
         "Confirmo que deseo reemplazar el cierre existente de esta sucursal y fecha",
