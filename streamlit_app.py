@@ -53,7 +53,7 @@ except ImportError:
 # CONFIGURACIÓN
 # ---------------------------------------------------------------------
 st.set_page_config(
-    page_title="Club Park - Control Operativo",
+    page_title="CLUB PARK - Control Operativo",
     page_icon="🚗",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -65,7 +65,7 @@ st.set_page_config(
 # ---------------------------------------------------------------------
 CSS_INSTITUCIONAL = """
 <style>
-/* Paleta Institucional Club Park: Verde Botella Oficial */
+/* Paleta Institucional CLUB PARK: Verde Botella Oficial */
 :root {
   --cpv-verde-verde: #0B3B24;
   --cpv-verde-verde: #072617;
@@ -267,7 +267,7 @@ PRECIOS_SUCURSALES = {
     "SUMO STA. MONICA": 50,
     "SUMO ECHEGARAY": 50,
     "RYOSHI": 80,
-    "ENCANTO": 60,
+    "ENCANTO": 90,
     "E-BNI": 50,
     "CHURRASQUERIA": 70,
 }
