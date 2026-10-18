@@ -1550,7 +1550,7 @@ def ejecutar_pruebas_operativas():
             resultados.append({"prueba": nombre, "estado": "❌", "detalle": str(exc)[:220]})
 
     def prueba_base_datos():
-        archivo = DATA_DIR / "_prueba_operativa.json"
+        archivo = DATA_DIR / "_historial_auditoria.json"
         datos = [{"id": "CP-TEST-000001", "sucursal": "RAMMA"}]
         with archivo.open("w", encoding="utf-8") as f:
             json.dump(datos, f, ensure_ascii=False)
