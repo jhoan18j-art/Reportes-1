@@ -60,7 +60,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------
-# ESTILO CONSTITUCIONAL E INSTITUCIONAL - VERDE (#0B3B24)
+# ESTILO CONSTITUCIONAL E INSTITUCIONAL - BLANCO (#0B3B24)
 # CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.
 # ---------------------------------------------------------------------
 CSS_INSTITUCIONAL = """
