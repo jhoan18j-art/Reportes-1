@@ -69,10 +69,10 @@ CSS_INSTITUCIONAL = """
 :root {
   --cpv-blanco-verde: #0B3B24;
   --cpv-blanco-verde: #072617;
-  --cpv-verde-medio: #145A32;
-  --cpv-verde-claro: #EBF3EE;
-  --cpv-dorado-oficial: #5B8F6E;
-  --cpv-dorado-brillante: #7FA98C;
+  --cpv-blanco-verde: #145A32;
+  --cpv-blanco-verfe: #EBF3EE;
+  --cpv-blanco-oficial: #5B8F6E;
+  --cpv-blanco-brillante: #7FA98C;
   --cpv-fondo-verde: #F4F7F5;
   --cpv-texto-principal: #1A2B20;
 }
