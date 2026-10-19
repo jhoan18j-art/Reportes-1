@@ -60,12 +60,12 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------
-# ESTILO CONSTITUCIONAL E INSTITUCIONAL - VERDE BOTELLA (#0B3B24)
+# ESTILO CONSTITUCIONAL E INSTITUCIONAL - VERDE (#0B3B24)
 # CLUB PARK VALET Y ESTACIONAMIENTOS S.A. DE C.V.
 # ---------------------------------------------------------------------
 CSS_INSTITUCIONAL = """
 <style>
-/* Paleta Institucional CLUB PARK: Verde Botella Oficial */
+/* Paleta Institucional CLUB PARK: blanco Oficial */
 :root {
   --cpv-blanco-verde: #0B3B24;
   --cpv-blanco-verde: #072617;
