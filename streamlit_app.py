@@ -73,7 +73,7 @@ CSS_INSTITUCIONAL = """
   --cpv-blanco-verfe: #EBF3EE;
   --cpv-blanco-oficial: #5B8F6E;
   --cpv-blanco-brillante: #7FA98C;
-  --cpv-fondo-verde: #F4F7F5;
+  --cpv-fondo-blanco: #F4F7F5;
   --cpv-texto-principal: #1A2B20;
 }
 
